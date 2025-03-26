@@ -33,6 +33,9 @@ class OpenAIService {
     }
 }
 
+const NORMAL_CHANNEL_ID = '1349892246501064830';
+const FORUM_CHANNEL_ID  = '1353940419133706310';
+
 class DiscordBot {
     constructor() {
         this.openAIService = new OpenAIService(process.env.OPENAI_API_KEY);
@@ -41,11 +44,11 @@ class DiscordBot {
             intents: [
                 GatewayIntentBits.Guilds,
                 GatewayIntentBits.GuildMessages,
-                GatewayIntentBits.MessageContent
+                GatewayIntentBits.MessageContent,
             ]
         });
 
-        this.channelId = '1349892246501064830'; // 특정 채널 ID를 입력하세요
+        this.channelId = NORMAL_CHANNEL_ID; // 특정 채널 ID를 입력하세요
         this.userMessages = this.openAIService.buildInitialOpenAIMessages();
 
         this.client.once('ready', () => {
@@ -56,17 +59,26 @@ class DiscordBot {
         this.client.on('messageCreate', (message) => this.handleMessage(message));
     }
 
-    async handleMessage(message) {
-        if (message.author.bot) return; // 봇 메시지는 무시
-
-        if (message.content.startsWith('!ask')) 
-        {
-            await this.handleAskMessage(message);
-        } else if (message.content.startsWith('!sum')) 
-        {
-            await this.handleSumMessage(message);
-        }
+    start() {
+      this.client.login(process.env.DISCORD_TOKEN);
     }
+
+    async handleMessage(message) {
+      if (message.author.bot) return; // 봇 메시지는 무시
+
+      if (message.content.startsWith('!ask')) 
+      {
+          await this.handleAskMessage(message);
+      } else if (message.content.startsWith('!sum')) 
+      {
+          await this.handleSumMessage(message);
+      } else if (message.content.startsWith('!forumPosts')) 
+      {
+          const posts = await this.getForumPosts(); // 포럼 게시글 가져오기
+          const response = posts.map(post => `${post.title} - ${post.author}: ${post.link}`).join('\n');
+          message.reply(`포럼 게시글:\n${response}`);
+      }
+  }
 
     async handleAskMessage(message) {
         const userMessageContent = this.extractUserMessage(message.content);
@@ -91,16 +103,34 @@ class DiscordBot {
         this.replyToMessage(message, response);
     }
 
+    async getForumPosts() {
+        const channel = await this.client.channels.fetch(FORUM_CHANNEL_ID);
+        const threads = await channel.threads.fetchActive(); // 활성화된 스레드 가져오기 (스레드 == 게시글)
+        const threadData = [];
+    
+        for (const thread of threads.threads.values()) { // for...of 루프 사용
+            const threadMessages = await thread.messages.fetch(); // 게시글 내용을 가져오기
+    
+            threadMessages.forEach(message => {
+                threadData.push({
+                    id: thread.id,
+                    title: thread.name,
+                    author: message.author.globalName, // 메시지 작성자 이름 사용
+                    content: message.content, // 메시지 내용
+                    link: `https://discord.com/channels/${thread.guild.id}/${thread.id}`
+                });
+            });
+        }
+    
+        return threadData;
+    }
+
     extractUserMessage(content) {
         return content.split(' ').slice(1).join(' '); // "!ask " 또는 "!sum " 이후의 내용
     }
 
     replyToMessage(message, response) {
         message.reply(response);
-    }
-
-    start() {
-        this.client.login(process.env.DISCORD_TOKEN);
     }
 }
 
