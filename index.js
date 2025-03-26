@@ -74,9 +74,22 @@ class DiscordBot {
           await this.handleSumMessage(message);
       } else if (message.content.startsWith('!forumPosts')) 
       {
-          const posts = await this.getForumPosts(); // 포럼 게시글 가져오기
-          const response = posts.map(post => `${post.title} - ${post.author}: ${post.link}`).join('\n');
-          message.reply(`포럼 게시글:\n${response}`);
+        const author = '은지캉';
+        const posts = await this.getForumPosts(author, FORUM_CHANNEL_ID); // 포럼 게시글 가져오기
+
+        const responses = await Promise.all(posts.map(async (post) => {
+            const openAIprompt = this.openAIService.buildInitialOpenAIMessages();
+
+            openAIprompt.push({ 
+                role: 'user', 
+                content: `다음 내용을 최대 10줄로 요약해줘. ${post.content}` 
+            });
+        
+            const summerizedResponse = await this.openAIService.getResponse(openAIprompt);
+            return `${post.author}님의 아임파인더입니다! - ${post.link}\n: ${summerizedResponse}`;
+        }));
+        
+        message.reply(`[아임파인더]\n${responses.join('\n')}`);
       }
   }
 
@@ -103,22 +116,21 @@ class DiscordBot {
         this.replyToMessage(message, response);
     }
 
-    async getForumPosts() {
-        const channel = await this.client.channels.fetch(FORUM_CHANNEL_ID);
+    async getForumPosts(author, forumChannelId) {
+        const channel = await this.client.channels.fetch(forumChannelId);
         const threads = await channel.threads.fetchActive(); // 활성화된 스레드 가져오기 (스레드 == 게시글)
         const threadData = [];
     
         for (const thread of threads.threads.values()) { // for...of 루프 사용
-            const threadMessages = await thread.messages.fetch(); // 게시글 내용을 가져오기
+            const starterMessage = await thread.fetchStarterMessage(); // 스레드의 시작 메시지를 가져오기
     
-            threadMessages.forEach(message => {
-                threadData.push({
-                    id: thread.id,
-                    title: thread.name,
-                    author: message.author.globalName, // 메시지 작성자 이름 사용
-                    content: message.content, // 메시지 내용
-                    link: `https://discord.com/channels/${thread.guild.id}/${thread.id}`
-                });
+            // 단일 메시지인 starterMessage 사용
+            threadData.push({
+                id: thread.id,
+                title: thread.name,
+                author: starterMessage.author.globalName,
+                content: starterMessage.content, // 메시지 내용
+                link: `https://discord.com/channels/${thread.guild.id}/${thread.id}`
             });
         }
     
