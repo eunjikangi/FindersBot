@@ -18,9 +18,17 @@ User가 대화방 채널에서 '!today' 라는 메세지를 입력 시,
 
 
 ### 디스코드 접근 권한
-최소 해당 기능을 가진 디스코드 봇이 채널에 오프라인상태로 존재 
-discord scope  - [✓] bot             - [✓] applications.commands
-discord bot권한 - [✓] Send Messages   - [✓] Read Messages/View Channels
+최소 해당 기능을 가진 디스코드 봇이 채널에 오프라인상태로 존재
+![image](https://github.com/user-attachments/assets/ad195fc3-28af-4431-9d72-4fa49a4fd676)
+
+discord scope  
+- [✓] bot
+discord bot권한
+- [✓] View Channels
+- [✓] Send Messages
+- [✓] Send Messages In Threads
+- [✓] Embed Links
+- [✓] Use Slash Commands
 
 ### ETC
  - Local 서버 사용할 예정입니다. (서버 개발경험없음 이슈...)
