@@ -14,7 +14,8 @@ User가 대화방 채널에서 '!today' 라는 메세지를 입력 시,
 우선은 제가 사과방에서 매일 오후 10시~12시경 해당 메세지로 챗봇 리포트를 작동시킬 예정입니다!
 
 **동작예시**
-<img width="840" alt="스크린샷 2025-03-27 오후 6 42 38" src="https://github.com/user-attachments/assets/49c761ab-bba9-4c0b-ac27-12240fdec827" />
+<img width="745" alt="기능캡쳐" src="https://github.com/user-attachments/assets/760edbb1-cb3a-4256-b60b-79f6162d41c3" />
+
 
 ### 디스코드 접근 권한
 최소 해당 기능을 가진 디스코드 봇이 채널에 오프라인상태로 존재 
