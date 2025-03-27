@@ -63,19 +63,7 @@ class DiscordBot {
     async handleMessage(message) {
       if (message.author.bot) return; // 봇 메시지는 무시
 
-      if (message.content.startsWith('!ask')) 
-      {
-          await this.handleAskMessage(message);
-      } 
-      else if (message.content.startsWith('!sum')) 
-      {
-          await this.handleSumMessage(message);
-      } 
-      else if (message.content.startsWith('!forumPosts')) 
-      {
-        await this.GetForumPosts(message);
-      }
-      else if (message.content.startsWith('!today')) 
+      if (message.content.startsWith('!today')) 
       {
         await this.ShowTodayPosts(message);
       }
@@ -101,11 +89,35 @@ class DiscordBot {
     }
 
     async ShowTodayPosts(message) {
-        const posts = await this.getTodayPosts(FORUM_CHANNEL_ID); // 포럼 게시글 가져오기
-        const response = posts.map(post => {
-            return `${post.link} - ${post.author}\n`;
-        })
-        message.reply(`[오늘의 게시글]\n${response}`);
+        const posts = await this.getTodayPosts(FORUM_CHANNEL_ID);
+
+        const responses = await Promise.all(posts.map(async (post) => {
+            const openAIprompt = this.openAIService.buildInitialOpenAIMessages();
+
+            openAIprompt.push({
+                role: 'user',
+                content: `다음 글에서 주제, 내용, 날짜, 장소를 간략하게 요약해줘. 해당 정보가 없다면 생략해줘. 
+                예시1)
+                * 주제: 라운지토크
+                * 내용: 사과방 지구가 좋아하는 것을 소개하고, 다른 사람들의 취향을 살펴보며 공유하는 시간
+                * 날짜: 3/25 화요일
+                * 장소: 온라인(디스코드 등)
+                
+                예시2)
+                * 주제: 책 읽기 챌린지
+                * 내용: 30분 책 읽기
+                * 날짜: 없음
+                * 장소: 없음
+
+                요약할 글 정보 : 
+                ${post.content}`
+            });
+
+            const summerizedContent = await this.openAIService.getResponse(openAIprompt);
+            return `${post.link} - ${post.author}\n${summerizedContent}\n\n`;
+        }));
+
+        message.reply(`[오늘의 게시글]\n${responses}`);
     }
 
     async handleAskMessage(message) {
