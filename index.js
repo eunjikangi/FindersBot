@@ -94,11 +94,11 @@ class DiscordBot {
         if (posts.length == 0) return responses;
 
         responses += message;
-        responses += await this.GetSummerizedPosts(posts);
+        responses += await this.GetSummerizedPosts(ch, posts);
         return responses;
     }
 
-    async GetSummerizedPosts(posts) {
+    async GetSummerizedPosts(ch, posts) {
         return await Promise.all(posts.map(async (post) => {
             const openAIprompt = this.openAIService.buildInitialOpenAIMessages();
 
@@ -132,7 +132,10 @@ class DiscordBot {
                 ${post.content}`
             });
 
-            const summerizedContent = await this.openAIService.getResponse(openAIprompt);
+            let summerizedContent = '';
+            if(ch != IAM_FINDER_CH_ID) {
+                summerizedContent = await this.openAIService.getResponse(openAIprompt);
+            }
             return `${post.link} - ${post.author}\n${summerizedContent}\n\n`;
         }));
     }
