@@ -13,7 +13,7 @@ app.listen(PORT, () => {
     console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);
 });
 
-const { Partials,  Client, GatewayIntentBits} = require('discord.js');
+const { Partials,  Client, GatewayIntentBits, escapeBulletedList} = require('discord.js');
 const OpenAI = require('openai');
 
 class OpenAIService {
@@ -84,12 +84,16 @@ class DiscordBot {
     async handleMessage(message) {
       if (message.author.bot) return; // 봇 메시지는 무시
 
+      // 1. Channel Message 처리
       if (message.content.startsWith('!today')) 
       {
+        message.reply("오늘 올라온 게시글을 열심히 모으고 있습니다! 잠시만 기다려주세요:heart: ");
         await this.ShowTodayPosts(message);
       }
       else if (message.content.startsWith('!chat'))
       {
+        message.reply("오늘의 대화를 열심히 요약하고 있습니다! 잠시만 기다려주세요:heart: ");
+        console.log(message)
         await this.handleSumMessage(message);
       }
       else if (message.content.startsWith('<@1350718874672435270>'))
@@ -101,6 +105,20 @@ class DiscordBot {
         if(message.mentions.repliedUser.id == '1350718874672435270')
         {
             await this.handleAskMessage(message);
+        }
+      }
+      else if (message.content.startsWith('!finder'))
+      {
+        const userId = Array.from(message.mentions.users.keys())[0];
+
+        if(userId == undefined)
+        {
+          message.reply(":see_no_evil:에러발생:see_no_evil:\n!finder 이름 형식으로 입력해주세요!\n ex) !finder 은지캉");
+        }
+        else
+        {
+            message.reply("아임파인더를 열심히 찾고있습니다! 잠시만 기다려주세요:heart: ");
+            await this.GetIamFinderPosts(message, userId);
         }
       }
   }
@@ -169,24 +187,60 @@ class DiscordBot {
         }));
     }
 
-    async GetIamFinderPosts(message) {
-        const author = '은지캉';
-        const posts = await this.getTodayPosts(FORUM_CHANNEL_ID); // 포럼 게시글 가져오기
+    async GetIamFinderPosts(message, userId) {
+        const posts = await this.getIamFinderPosts(IAM_FINDER_CH_ID, userId); // 포럼 게시글 가져오기
 
-        const responses = await Promise.all(posts.map(async (post) => {
-            const openAIprompt = this.openAIService.buildInitialOpenAIMessages();
+        if (posts.length == 0)
+        {
+            message.reply("아임파인더 정보를 찾지 못했어요:face_holding_back_tears:");
+            return;
+        }
 
-            openAIprompt.push({
-                role: 'user',
-                content: `다음 내용을 최대 10줄로 요약해줘. ${post.content}`
-            });
+        let replyMessage = `:apple:${post.author}님의 아임파인더 정보:apple:\n`
+        for (const post of posts) { // for...of 루프 사용
+            replyMessage += `${post.link} - ${post.author}\n`;
+        }
 
-            const summerizedResponse = await this.openAIService.getResponse(openAIprompt);
-            return `${post.author}님의 아임파인더입니다! - ${post.link}\n: ${summerizedResponse}`;
-        }));
-
-        message.reply(`[아임파인더]\n${responses.join('\n')}`);
+        message.reply(replyMessage);
     }
+
+    async getIamFinderPosts(forumChannelId, userId) {
+        const findUser = (thread) => {
+            console.log(thread.id + ":" + userId);
+            return (thread.id == userId);
+        };
+        
+        return await this.fetchThreadsForFindUser(forumChannelId, findUser);
+    }
+
+    async fetchThreadsForFindUser(forumChannelId, filterFunc = null) {
+        const channel = await this.client.channels.fetch(forumChannelId);
+        const threads = await channel.threads.fetch(); // 활성화된 스레드 가져오기 (활성화가 안되어있나보다)
+        const threadData = [];
+    
+        for (const thread of threads.threads.values()) { // for...of 루프 사용
+            const starterMessage = await thread.fetchStarterMessage(); // 스레드의 시작 메시지를 가져오기
+            
+            if (filterFunc) {
+                // Today 넘어가면 종료
+                if(filterFunc(thread))
+                {
+                    threadData.push({
+                        id: thread.id,
+                        title: thread.name,
+                        author: starterMessage.author.globalName,
+                        content: starterMessage.content, // 메시지 내용
+                        link: `https://discord.com/channels/${thread.guild.id}/${thread.id}`
+                    });
+
+                    break;
+                }
+            }
+        }
+    
+        return threadData;
+    }
+
 
     async handleAskMessage(message) {
         const userMessageContent = this.extractUserMessage(messaggite.content);
@@ -203,7 +257,7 @@ class DiscordBot {
         const openAIMessages = this.openAIService.buildInitialOpenAIMessages();
 
         // 2. 사과방 채팅방 메세지 파싱
-        const userMessageContent = await this.loadMessages(APPLE_CHANNEL_ID);
+        const userMessageContent = await this.loadMessages(message.channelId);
 
         // 3. user의 호출 message 추출
         openAIMessages.push({ 
@@ -247,14 +301,10 @@ class DiscordBot {
             return isSameDate(threadCreatedAt, today);
         };
         
-        return await this.fetchThreads(forumChannelId, isToday);
+        return await this.fetchThreadsForSameData(forumChannelId, isToday);
     }
     
-    async getIamFinder(forumChannelId) {
-        return await this.fetchThreads(forumChannelId);
-    }
-
-    async fetchThreads(forumChannelId, filterFunc = null) {
+    async fetchThreadsForSameData(forumChannelId, filterFunc = null) {
         const channel = await this.client.channels.fetch(forumChannelId);
         const threads = await channel.threads.fetchActive(); // 활성화된 스레드 가져오기
         const threadData = [];
@@ -262,9 +312,14 @@ class DiscordBot {
         for (const thread of threads.threads.values()) { // for...of 루프 사용
             const starterMessage = await thread.fetchStarterMessage(); // 스레드의 시작 메시지를 가져오기
             
-            if (filterFunc && !filterFunc(thread)) {
-                continue; // 필터 함수가 주어지고, 조건을 만족하지 않으면 스킵
+            if (filterFunc) {
+                // Today 넘어가면 종료
+                if(!filterFunc(thread))
+                {
+                    break;
+                }
             }
+
             threadData.push({
                 id: thread.id,
                 title: thread.name,
