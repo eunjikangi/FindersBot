@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Partials,  Client, GatewayIntentBits} = require('discord.js');
 const OpenAI = require('openai');
 
 class OpenAIService {
@@ -20,7 +20,7 @@ class OpenAIService {
             {
                 role: 'system',
                 content: `너는 디스코드 내에 존재하는 챗봇이고,
-                너의 이름은 사과방 핑거 프로텍터야.
+                너의 이름은 애플핑이야. 사과방 핑거 프로텍터 라는 뜻이지.
                 너는 다정하고 깜찍하고 활기찬 말투의 소유자야.`
               }
         ];
@@ -29,7 +29,6 @@ class OpenAIService {
 
 const NORMAL_CHANNEL_ID = '1349892246501064830';
 const FORUM_CHANNEL_ID  = '1353940419133706310';
-const FORUM_CHANNEL_ID_2  = '1355108765233320037';
 
 const IAM_FINDER_CH_ID = '1346330549731721298';
 const CHALLENGE_CH_ID = '1348486199257600000';
@@ -46,7 +45,12 @@ class DiscordBot {
                 GatewayIntentBits.Guilds,
                 GatewayIntentBits.GuildMessages,
                 GatewayIntentBits.MessageContent,
-            ]
+                GatewayIntentBits.DirectMessages,
+            ],
+            partials: [
+                Partials.Channel,
+                Partials.Message
+              ]
         });
 
         this.channelId = NORMAL_CHANNEL_ID; // 특정 채널 ID를 입력하세요
@@ -73,6 +77,17 @@ class DiscordBot {
       else if (message.content.startsWith('!chat'))
       {
         await this.handleSumMessage(message);
+      }
+      else if (message.content.startsWith('<@1350718874672435270>'))
+      {
+        await this.handleAskMessage(message);
+      }
+      else if (message.mentions.repliedUser != null)
+      {
+        if(message.mentions.repliedUser.id == '1350718874672435270')
+        {
+            await this.handleAskMessage(message);
+        }
       }
   }
 
@@ -166,7 +181,6 @@ class DiscordBot {
         const response = await this.openAIService.getResponse(this.userMessages);
 
         this.userMessages.push({ role: 'assistant', content: response });
-
         this.replyToMessage(message, response);
     }
 
