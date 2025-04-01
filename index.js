@@ -241,9 +241,8 @@ class DiscordBot {
         return threadData;
     }
 
-
     async handleAskMessage(message) {
-        const userMessageContent = this.extractUserMessage(messaggite.content);
+        const userMessageContent = this.extractUserMessage(message.content);
         this.userMessages.push({ role: 'user', content: userMessageContent });
 
         const response = await this.openAIService.getResponse(this.userMessages);
@@ -289,7 +288,7 @@ class DiscordBot {
         });
 
         // 4. OpenAI 응답 받아오기
-        let response = ':apple: 오늘의 사과방 대화요약 :apple: \n';
+        let response = ':apple: 오늘의 채팅방 대화요약 :apple: \n';
         response += await this.openAIService.getResponse(openAIMessages);
         this.replyToMessage(message, response);
     }   
