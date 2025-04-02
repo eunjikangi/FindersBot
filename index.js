@@ -1,10 +1,27 @@
 require('dotenv').config();
-const { Partials,  Client, GatewayIntentBits} = require('discord.js');
+const { Partials, Client, GatewayIntentBits } = require('discord.js');
 const OpenAI = require('openai');
 
 class OpenAIService {
-    constructor(apiKey) {
+    constructor(apiKey, channelName) {
         this.openai = new OpenAI({ apiKey });
+        this.channelName = getSimpleChannelName(channelName);
+
+        const BotNameMap = {
+            "사과": "애플",
+            "블루베리": "블루베리",
+            "망고": "망고",
+            "토마토": "토마토",
+            "귤": "귤",
+            "포도": "포도",
+            "복숭아": "피치",
+            "올리브": "올리브",
+            "체리": "체리",
+            "레몬": "레몬",
+            "아보카도": "아보카도",
+            "라임": "라임",
+        };
+        this.botName = BotNameMap[channelName] || channelName;
     }
 
     async getResponse(messages) {
@@ -12,7 +29,7 @@ class OpenAIService {
             model: 'gpt-4o-mini',
             messages: messages,
         });
-        return response.choices[0].message.content; 
+        return response.choices[0].message.content;
     }
 
     buildInitialOpenAIMessages() {
@@ -20,15 +37,16 @@ class OpenAIService {
             {
                 role: 'system',
                 content: `너는 디스코드 내에 존재하는 챗봇이고,
-                너의 이름은 애플핑이야. 사과방 핑거 프로텍터 라는 뜻이지.
+                너의 이름은 ${this.botName}핑이야.
+                ${this.channelName}방 핑거 프로텍터 라는 뜻이지.
                 너는 다정하고 깜찍하고 활기찬 말투의 소유자야.`
-              }
+            }
         ];
     }
 }
 
 const NORMAL_CHANNEL_ID = '1349892246501064830';
-const FORUM_CHANNEL_ID  = '1353940419133706310';
+const FORUM_CHANNEL_ID = '1353940419133706310';
 
 const IAM_FINDER_CH_ID = '1346330549731721298';
 const CHALLENGE_CH_ID = '1348486199257600000';
@@ -36,10 +54,13 @@ const LOUNGE_TALK_CH_ID = '1346332258759475290';
 const FLEA_MARKET_CH_ID = '1346332310211006534';
 const APPLE_CHANNEL_ID = '1346335433591623824';
 
+const DEFAULT_CHANNEL_NAME = '사과';
+const DEFAULT_CHANNEL_EMOJI = '🍎';
+
+
 class DiscordBot {
     constructor() {
-        this.openAIService = new OpenAIService(process.env.OPENAI_API_KEY);
-        
+
         this.client = new Client({
             intents: [
                 GatewayIntentBits.Guilds,
@@ -50,10 +71,22 @@ class DiscordBot {
             partials: [
                 Partials.Channel,
                 Partials.Message
-              ]
+            ]
         });
 
         this.channelId = NORMAL_CHANNEL_ID; // 특정 채널 ID를 입력하세요
+        this.openAIService = null;
+        this.userMessages = '';
+        this.channelName = DEFAULT_CHANNEL_NAME;
+        this.channelEmoji = DEFAULT_CHANNEL_EMOJI;
+    }
+
+    async start() {
+        await this.client.login(process.env.DISCORD_TOKEN);
+        const fetchedChannel = await this.client.channels.fetch(channelId);
+        this.channelName = getSimpleChannelName(channel.name) || DEFAULT_CHANNEL_NAME;
+        this.channelEmoji = getChannelEmoji(channel.name);
+        this.openAIService = new OpenAIService(process.env.OPENAI_API_KEY, fetchedChannel.name);
         this.userMessages = this.openAIService.buildInitialOpenAIMessages();
 
         this.client.once('ready', () => {
@@ -63,37 +96,28 @@ class DiscordBot {
         this.client.on('messageCreate', (message) => this.handleMessage(message));
     }
 
-    start() {
-      this.client.login(process.env.DISCORD_TOKEN);
-    }
-
     async handleMessage(message) {
-      if (message.author.bot) return; // 봇 메시지는 무시
+        if (message.author.bot) return; // 봇 메시지는 무시
 
-      if (message.content.startsWith('!today')) 
-      {
-        await this.ShowTodayPosts(message);
-      }
-      else if (message.content.startsWith('!chat'))
-      {
-        await this.handleSumMessage(message);
-      }
-      else if (message.content.startsWith('<@1350718874672435270>'))
-      {
-        await this.handleAskMessage(message);
-      }
-      else if (message.mentions.repliedUser != null)
-      {
-        if(message.mentions.repliedUser.id == '1350718874672435270')
-        {
+        if (message.content.startsWith('!today')) {
+            await this.ShowTodayPosts(message);
+        }
+        else if (message.content.startsWith('!chat')) {
+            await this.handleSumMessage(message);
+        }
+        else if (message.content.startsWith('<@1350718874672435270>')) {
             await this.handleAskMessage(message);
         }
-      }
-  }
+        else if (message.mentions.repliedUser != null) {
+            if (message.mentions.repliedUser.id == '1350718874672435270') {
+                await this.handleAskMessage(message);
+            }
+        }
+    }
 
     async ShowTodayPosts(message) {
-        let replyMessage = ':apple:오늘 파인클에 새로 올라온 게시물이에요!:apple:\n\n'
-        
+        let replyMessage = `${this.channelEmoji}오늘 파인클에 새로 올라온 게시물이에요!${this.channelEmoji}\n\n`
+
         replyMessage += await this.GetChannelResponse(IAM_FINDER_CH_ID, '[🤗｜아임파인더]\n');
         replyMessage += await this.GetChannelResponse(CHALLENGE_CH_ID, '[:parachute:｜파인딩 첼린지]\n');
         replyMessage += await this.GetChannelResponse(LOUNGE_TALK_CH_ID, '[🎙｜라운지토크]\n');
@@ -148,7 +172,7 @@ class DiscordBot {
             });
 
             let summerizedContent = '';
-            if(ch != IAM_FINDER_CH_ID) {
+            if (ch != IAM_FINDER_CH_ID) {
                 summerizedContent = await this.openAIService.getResponse(openAIprompt);
             }
             return `${post.link} - ${post.author}\n${summerizedContent}\n\n`;
@@ -185,16 +209,16 @@ class DiscordBot {
     }
 
     async handleSumMessage(message) {
-        // 1. 사과방 챗봇 페르소나 설정
+        // 1. 방 챗봇 페르소나 설정
         const openAIMessages = this.openAIService.buildInitialOpenAIMessages();
 
-        // 2. 사과방 채팅방 메세지 파싱
+        // 2. 사과방 메세지 파싱
         const userMessageContent = await this.loadMessages(APPLE_CHANNEL_ID);
 
         // 3. user의 호출 message 추출
-        openAIMessages.push({ 
-            role: 'user', 
-            content: `다음은 '사과방'의 대화 내용입니다.
+        openAIMessages.push({
+            role: 'user',
+            content: `다음은 '${this.channelName}방'의 대화 내용입니다.
             하루 간 오고간 대화 내용을 2~3줄 정도로 요약해주세요. 
             추천하는 항목과 함께 링크가 첨부되어있으면, 해당 링크도 같이 정리해서 첨부해주세요. 
             요런 리스트로 해당하는 내용이 없다면, 그냥 간략하게만 요약하셔도 됩니다. 다정하게 얘기해주세요!            
@@ -216,15 +240,15 @@ class DiscordBot {
 
             이렇게 오늘도 서로의 경험과 인사이트를 나누며 소중한 시간을 보냈답니다! 다음에도 재미있는 이야기를 많이 나눠요! 💖✨
 
-            다음은 사과방의 대화 내용입니다!
-            ${userMessageContent}` 
+            다음은 ${this.channelName}방의 대화 내용입니다!
+            ${userMessageContent}`
         });
 
         // 4. OpenAI 응답 받아오기
-        let response = ':apple: 오늘의 사과방 대화요약 :apple: \n';
+        let response = `${this.channelEmoji} 오늘의 ${this.channelName}방 대화요약 ${this.channelEmoji} \n`;
         response += await this.openAIService.getResponse(openAIMessages);
         this.replyToMessage(message, response);
-    }   
+    }
 
     async getTodayPosts(forumChannelId) {
         const today = new Date();
@@ -232,10 +256,10 @@ class DiscordBot {
             const threadCreatedAt = new Date(thread.createdAt);
             return isSameDate(threadCreatedAt, today);
         };
-        
+
         return await this.fetchThreads(forumChannelId, isToday);
     }
-    
+
     async getIamFinder(forumChannelId) {
         return await this.fetchThreads(forumChannelId);
     }
@@ -244,10 +268,10 @@ class DiscordBot {
         const channel = await this.client.channels.fetch(forumChannelId);
         const threads = await channel.threads.fetchActive(); // 활성화된 스레드 가져오기
         const threadData = [];
-    
+
         for (const thread of threads.threads.values()) { // for...of 루프 사용
             const starterMessage = await thread.fetchStarterMessage(); // 스레드의 시작 메시지를 가져오기
-            
+
             if (filterFunc && !filterFunc(thread)) {
                 continue; // 필터 함수가 주어지고, 조건을 만족하지 않으면 스킵
             }
@@ -259,7 +283,7 @@ class DiscordBot {
                 link: `https://discord.com/channels/${thread.guild.id}/${thread.id}`
             });
         }
-    
+
         return threadData;
     }
 
@@ -277,19 +301,16 @@ class DiscordBot {
 
             fetchedMessages.forEach(msg => {
                 const msgCreatedDate = new Date(msg.createdTimestamp);
-                if(isSameDate(msgCreatedDate, today))
-                {
-                    if(!msg.author.bot)
-                    {
+                if (isSameDate(msgCreatedDate, today)) {
+                    if (!msg.author.bot) {
                         todaysChatData.push(`${msg.author.globalName} : ${msg.content} `);
                     }
                 }
-                else
-                {
+                else {
                     escape = true;
                 }
             });
-        } while (fetchedMessages.size === 100 && escape == false); 
+        } while (fetchedMessages.size === 100 && escape == false);
 
         return todaysChatData;
     }
@@ -303,11 +324,29 @@ class DiscordBot {
     }
 }
 
-const isSameDate = (date1, date2) => { 
-    return date1.getFullYear() === date2.getFullYear() 
-    && date1.getMonth() === date2.getMonth() 
-    && date1.getDate() === date2.getDate(); 
-  } 
+const isSameDate = (date1, date2) => {
+    return date1.getFullYear() === date2.getFullYear()
+        && date1.getMonth() === date2.getMonth()
+        && date1.getDate() === date2.getDate();
+}
+
+const getSimpleChannelName = (channelName) => {
+    const splittedChannelName = channelName.split("|");
+    if (splittedChannelName.length > 1) {
+        return splittedChannelName[1].trim();
+    } else {
+        return channelName;
+    }
+}
+
+const getChannelEmoji = (channelName) => {
+    const splittedChannelName = channelName.split("|");
+    if (splittedChannelName.length > 1) {
+        return splittedChannelName[0].trim();
+    } else {
+        return DEFAULT_CHANNEL_EMOJI;
+    }
+}
 
 // 봇 인스턴스 생성 및 시작
 const bot = new DiscordBot();
