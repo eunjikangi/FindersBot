@@ -17,25 +17,8 @@ const { Partials,  Client, GatewayIntentBits, escapeBulletedList} = require('dis
 const OpenAI = require('openai');
 
 class OpenAIService {
-    constructor(apiKey, channelName) {
+    constructor(apiKey) {
         this.openai = new OpenAI({ apiKey });
-        this.channelName = getSimpleChannelName(channelName);
-
-        const BotNameMap = {
-            "사과": "애플",
-            "블루베리": "블루베리",
-            "망고": "망고",
-            "토마토": "토마토",
-            "귤": "귤",
-            "포도": "포도",
-            "복숭아": "피치",
-            "올리브": "올리브",
-            "체리": "체리",
-            "레몬": "레몬",
-            "아보카도": "아보카도",
-            "라임": "라임",
-        };
-        this.botName = BotNameMap[channelName] || channelName;
     }
 
     async getResponse(messages) {
@@ -51,26 +34,37 @@ class OpenAIService {
             {
                 role: 'system',
                 content: `너는 디스코드 내에 존재하는 챗봇이고,
-                너의 이름은 ${this.botName}핑이야.
-                ${this.channelName}방 핑거 프로텍터 라는 뜻이지.
+                너의 이름은 애플핑이야.
+                사과방의 핑거 프로텍터 라는 뜻이지.
                 너는 다정하고 깜찍하고 활기찬 말투의 소유자야.`
             }
         ];
     }
 }
 
-const NORMAL_CHANNEL_ID = '1349892246501064830';
-const FORUM_CHANNEL_ID = '1353940419133706310';
-
 const IAM_FINDER_CH_ID = '1346330549731721298';
 const CHALLENGE_CH_ID = '1348486199257600000';
 const LOUNGE_TALK_CH_ID = '1346332258759475290';
 const FLEA_MARKET_CH_ID = '1346332310211006534';
-const APPLE_CHANNEL_ID = '1346335433591623824';
 
 const DEFAULT_CHANNEL_NAME = '사과';
 const DEFAULT_CHANNEL_EMOJI = '🍎';
 
+const CHANNEL_COUNT = 12;
+const channelMap = {
+    "1346334076126232576": "블루베리",
+    "1346334969479303190": "망고",
+    "1346335023015530506": "토마토",
+    "1346335090422186004": "귤",
+    "1346335210710503466": "포도",
+    "1346335262535323688": "복숭아",
+    "1346335320953847838": "올리브",
+    "1346335378864341042": "체리",
+    "1346335433591623824": "사과",
+    "1346335484259074069": "레몬",
+    "1346335536415248405": "아보카도",
+    "1346335585975140352": "라임"
+};
 
 class DiscordBot {
     constructor() {
@@ -88,20 +82,31 @@ class DiscordBot {
             ]
         });
 
-        this.channelId = NORMAL_CHANNEL_ID; // 특정 채널 ID를 입력하세요
         this.openAIService = null;
-        this.userMessages = '';
+        this.userMessages = [];
         this.channelName = DEFAULT_CHANNEL_NAME;
         this.channelEmoji = DEFAULT_CHANNEL_EMOJI;
     }
 
     async start() {
         await this.client.login(process.env.DISCORD_TOKEN);
-        const fetchedChannel = await this.client.channels.fetch(channelId);
-        this.channelName = getSimpleChannelName(channel.name) || DEFAULT_CHANNEL_NAME;
-        this.channelEmoji = getChannelEmoji(channel.name);
-        this.openAIService = new OpenAIService(process.env.OPENAI_API_KEY, fetchedChannel.name);
-        this.userMessages = this.openAIService.buildInitialOpenAIMessages();
+
+        this.openAIService = new OpenAIService(process.env.OPENAI_API_KEY);
+
+        for (let ch = 0; ch <= CHANNEL_COUNT; ch++) {
+            const keys = Object.keys(channelMap);
+            const ChId = keys[ch];
+            const ChName = channelMap[ChId];
+
+            const prompt = [{
+                    role: 'system',
+                    content: `너는 디스코드 내에 존재하는 챗봇이고,
+                    너의 이름은 ${ChName}핑이야.
+                    ${ChName}방의 핑거 프로텍터 라는 뜻이지.
+                    너는 다정하고 깜찍하고 활기찬 말투의 소유자야.`
+                }];
+            this.userMessages[ch] = prompt;
+        }
 
         this.client.once('ready', () => {
             console.log(`Logged in as ${this.client.user.tag}`);
@@ -122,7 +127,6 @@ class DiscordBot {
       else if (message.content.startsWith('!chat'))
       {
         message.reply("오늘의 대화를 열심히 요약하고 있습니다! 잠시만 기다려주세요:heart: ");
-        console.log(message)
         await this.handleSumMessage(message);
       }
       else if (message.content.startsWith('<@1350718874672435270>'))
@@ -155,28 +159,49 @@ class DiscordBot {
     async ShowTodayPosts(message) {
         let replyMessage = `${this.channelEmoji}오늘 파인클에 새로 올라온 게시물이에요!${this.channelEmoji}\n\n`
 
-        replyMessage += await this.GetChannelResponse(IAM_FINDER_CH_ID, '[🤗｜아임파인더]\n');
-        replyMessage += await this.GetChannelResponse(CHALLENGE_CH_ID, '[:parachute:｜파인딩 첼린지]\n');
-        replyMessage += await this.GetChannelResponse(LOUNGE_TALK_CH_ID, '[🎙｜라운지토크]\n');
-        replyMessage += await this.GetChannelResponse(FLEA_MARKET_CH_ID, '[💞｜재능플리마켓]\n');
+        replyMessage += await this.GetChannelResponse(message, IAM_FINDER_CH_ID, '[🤗｜아임파인더]\n');
+        replyMessage += await this.GetChannelResponse(message, CHALLENGE_CH_ID, '[:parachute:｜파인딩 첼린지]\n');
+        replyMessage += await this.GetChannelResponse(message, LOUNGE_TALK_CH_ID, '[🎙｜라운지토크]\n');
+        replyMessage += await this.GetChannelResponse(message, FLEA_MARKET_CH_ID, '[💞｜재능플리마켓]\n');
 
         message.reply(replyMessage);
     }
 
-    async GetChannelResponse(ch, message) {
+    async GetChannelResponse(message, ch, outputMessage) {
         const posts = await this.getTodayPosts(ch);
         let responses = ''
 
         if (posts.length == 0) return responses;
 
-        responses += message;
-        responses += await this.GetSummerizedPosts(ch, posts);
+        responses += outputMessage;
+        responses += await this.GetSummerizedPosts(message, ch, posts);
         return responses;
     }
 
-    async GetSummerizedPosts(ch, posts) {
+    async GetSummerizedPosts(message, ch, posts) {
         return await Promise.all(posts.map(async (post) => {
-            const openAIprompt = this.openAIService.buildInitialOpenAIMessages();
+
+        const currentChannelId = message.channelId;
+        const fetchedChannel = await this.client.channels.fetch(currentChannelId);
+
+        let currentChannelName = fetchedChannel.name;
+        let currentChannelEmoji = DEFAULT_CHANNEL_EMOJI;
+        
+        if (channelMap.hasOwnProperty(currentChannelId)) {
+            currentChannelName = channelMap[currentChannelId];
+            currentChannelEmoji = getChannelEmoji(fetchedChannel.name);
+        }
+
+        // 2. 방 챗봇 페르소나 설정
+        const openAIprompt = [
+            {
+                role: 'system',
+                content: `너는 디스코드 내에 존재하는 챗봇이고,
+                너의 이름은 ${currentChannelName}핑이야.
+                ${currentChannelName}의 핑거 프로텍터 라는 뜻이지${currentChannelEmoji}.
+                너는 다정하고 깜찍하고 활기찬 말투의 소유자야.`
+            }
+        ];
 
             openAIprompt.push({
                 role: 'user',
@@ -272,25 +297,61 @@ class DiscordBot {
 
     async handleAskMessage(message) {
         const userMessageContent = this.extractUserMessage(message.content);
-        this.userMessages.push({ role: 'user', content: userMessageContent });
 
-        const response = await this.openAIService.getResponse(this.userMessages);
+    // 1. 채팅방 페르소나 설정
+    const currentChannelId = message.channelId;
+    const fetchedChannel = await this.client.channels.fetch(currentChannelId);
+    let MessageIndex = 8;
+    
+    const keys = Object.keys(channelMap);
+    const index = keys.indexOf(currentChannelId);
 
-        this.userMessages.push({ role: 'assistant', content: response });
+    if (index !== -1) {
+        MessageIndex = index;
+    }
+
+        this.userMessages[MessageIndex].push({ 
+            role: 'user', 
+            content: userMessageContent });
+
+        const response = await this.openAIService.getResponse(this.userMessages[MessageIndex]);
+
+        this.userMessages[MessageIndex].push({ 
+            role: 'assistant', 
+            content: response });
+
         this.replyToMessage(message, response);
     }
 
     async handleSumMessage(message) {
-        // 1. 방 챗봇 페르소나 설정
-        const openAIMessages = this.openAIService.buildInitialOpenAIMessages();
+        // 1. 채팅방 메세지 파싱
+        const currentChannelId = message.channelId;
+        const userMessageContent = await this.loadMessages(currentChannelId);
+        const fetchedChannel = await this.client.channels.fetch(currentChannelId);
 
-        // 2. 채팅방 메세지 파싱
-        const userMessageContent = await this.loadMessages(message.channelId);
+        let currentChannelName = fetchedChannel.name;
+        let currentChannelEmoji = DEFAULT_CHANNEL_EMOJI;
+        
+        if (channelMap.hasOwnProperty(currentChannelId)) {
+            currentChannelName = getSimpleChannelName(fetchedChannel.name);
+            currentChannelEmoji = getChannelEmoji(fetchedChannel.name);
+        }
+
+        // 2. 방 챗봇 페르소나 설정
+        const openAIMessages = [
+            {
+                role: 'system',
+                content: `너는 디스코드 내에 존재하는 챗봇이고,
+                너의 이름은 ${currentChannelName}핑이야.
+                ${currentChannelName}의 핑거 프로텍터 라는 뜻이지${currentChannelEmoji}.
+                너는 다정하고 깜찍하고 활기찬 말투의 소유자야.`
+            }
+        ];
 
         // 3. user의 호출 message 추출
         openAIMessages.push({
             role: 'user',
-            content: `다음은 '${this.channelName}방'의 대화 내용입니다.
+            content: `다음은 '${currentChannelName}방'의 대화 내용입니다. 
             하루 간 오고간 대화 내용을 2~3줄 정도로 요약해주세요. 
             추천하는 항목과 함께 링크가 첨부되어있으면, 해당 링크도 같이 정리해서 첨부해주세요. 
             요런 리스트로 해당하는 내용이 없다면, 그냥 간략하게만 요약하셔도 됩니다. 다정하게 얘기해주세요!            
@@ -312,12 +373,12 @@ class DiscordBot {
 
             이렇게 오늘도 서로의 경험과 인사이트를 나누며 소중한 시간을 보냈답니다! 다음에도 재미있는 이야기를 많이 나눠요! 💖✨
 
-            다음은 ${this.channelName}방의 대화 내용입니다!
+            다음은 ${currentChannelName}방의 대화 내용입니다!
             ${userMessageContent}`
         });
 
         // 4. OpenAI 응답 받아오기
-        let response = `${this.channelEmoji} 오늘의 ${this.channelName}방 대화요약 ${this.channelEmoji} \n`;
+        let response = `${currentChannelEmoji} 오늘의 ${currentChannelName}방 대화요약 ${currentChannelEmoji} \n`;
         response += await this.openAIService.getResponse(openAIMessages);
         this.replyToMessage(message, response);
     }
