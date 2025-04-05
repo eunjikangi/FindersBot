@@ -1,5 +1,7 @@
 require('dotenv').config();
 
+const path = require('path');
+const fs = require('fs'); // 파일 시스템 모듈 가져오기
 const express = require('express');
 const app = express();
 
@@ -142,16 +144,15 @@ class DiscordBot {
       }
       else if (message.content.startsWith('!finder'))
       {
-        const userId = Array.from(message.mentions.users.keys())[0];
+        const userName = message.content.split(" ")[1];
 
-        if(userId == undefined)
+        if(userName == undefined)
         {
           message.reply(":see_no_evil:에러발생:see_no_evil:\n!finder 이름 형식으로 입력해주세요!\n ex) !finder 은지캉");
         }
         else
         {
-            message.reply("아임파인더를 열심히 찾고있습니다! 잠시만 기다려주세요:heart: ");
-            await this.GetIamFinderPosts(message, userId);
+            await this.GetIamFinderPosts(message, userName);
         }
       }
   }
@@ -241,38 +242,80 @@ class DiscordBot {
         }));
     }
 
-    async GetIamFinderPosts(message, userId) {
-        const posts = await this.getIamFinderPosts(IAM_FINDER_CH_ID, userId); // 포럼 게시글 가져오기
+    async GetIamFinderPosts(message, userName) {
+        const link = await this.getLinkByAuthorFromJson(userName); // 포럼 게시글 가져오기
 
-        if (posts.length == 0)
+        if (link == null)
         {
             message.reply("아임파인더 정보를 찾지 못했어요:face_holding_back_tears:");
             return;
         }
 
-        let replyMessage = `:apple:${post.author}님의 아임파인더 정보:apple:\n`
-        for (const post of posts) { // for...of 루프 사용
-            replyMessage += `${post.link} - ${post.author}\n`;
-        }
+        let replyMessage = `:gift_heart: ${userName}님의 아임파인더 :gift_heart:\n`
+        replyMessage += `${link}\n`;
 
         message.reply(replyMessage);
     }
 
-    async getIamFinderPosts(forumChannelId, userId) {
-        const findUser = (thread) => {
-            console.log(thread.id + ":" + userId);
-            return (thread.id == userId);
-        };
-        
-        return await this.fetchThreadsForFindUser(forumChannelId, findUser);
+    async getLinkByAuthorFromJson(author) {
+        try {
+            const filePath = path.join(__dirname, 'threadData.json'); // 파일 경로 설정
+            const data = await fs.promises.readFile(filePath, 'utf8'); // JSON 파일 읽기
+            const jsonData = JSON.parse(data); // JSON 문자열을 객체로 변환
+    
+            const entry = jsonData.find(item => item.author === author); // author에 해당하는 항목 찾기
+            return entry ? entry.link : null; // 링크 반환
+        } catch (error) {
+            console.error('오류 발생:', error);
+            return null;
+        }
     }
+
+    async makeImFinderJSON() {
+        const channel = await this.client.channels.fetch(IAM_FINDER_CH_ID);
+        let activeThreads = await channel.threads.fetchActive();
+        let archivedThreads = await channel.threads.fetchArchived();
+    
+        const threadData = [];
+    
+        for (const thread of activeThreads.threads.values()) {
+            const starterMessage = await thread.fetchStarterMessage();
+            
+            threadData.push({
+                author: starterMessage.author.globalName,
+                link: `https://discord.com/channels/${thread.guild.id}/${thread.id}`
+            });
+        }
+    
+        for (const thread of archivedThreads.threads.values()) {
+            const starterMessage = await thread.fetchStarterMessage();
+            
+            threadData.push({
+                author: starterMessage.author.globalName,
+                link: `https://discord.com/channels/${thread.guild.id}/${thread.id}`
+            });
+        }
+
+        console.log(threadData);
+
+        // Define the path for the JSON file
+        const filePath = path.join(__dirname, 'threadData.json');
+    
+        // Write data to JSON file
+        fs.writeFileSync(filePath, JSON.stringify(threadData, null, 2), 'utf-8');
+    
+        console.log(`Data has been saved to ${filePath}`);
+    }
+
 
     async fetchThreadsForFindUser(forumChannelId, filterFunc = null) {
         const channel = await this.client.channels.fetch(forumChannelId);
-        const threads = await channel.threads.fetch(); // 활성화된 스레드 가져오기 (활성화가 안되어있나보다)
+        let Activethreads = await channel.threads.fetchActive(); // 활성화된 스레드 가져오기 (활성화가 안되어있나보다)
+        let archivedThreads = await channel.threads.fetchArchived()
+
         const threadData = [];
     
-        for (const thread of threads.threads.values()) { // for...of 루프 사용
+        for (const thread of Activethreads.threads.values()) { // for...of 루프 사용
             const starterMessage = await thread.fetchStarterMessage(); // 스레드의 시작 메시지를 가져오기
             
             if (filterFunc) {
