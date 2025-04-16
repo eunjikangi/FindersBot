@@ -25,7 +25,7 @@ class OpenAIService {
 
     async getResponse(messages) {
         const response = await this.openai.chat.completions.create({
-            model: 'gpt-4o-mini',
+            model: 'gpt-4o',
             messages: messages,
         });
         return response.choices[0].message.content;
@@ -209,7 +209,7 @@ class DiscordBot {
 
             openAIprompt.push({
                 role: 'user',
-                content: `다음 글에서 주제, 내용, 날짜, 장소를 간략하게 요약해줘. 해당 정보가 없다면 생략해줘. 
+                content: `다음 글에서 주제, 내용, 날짜, 장소를 간략하게 요약해줘. 해당 정보가 없다면 해당 정보는 생략해줘. 
                 예시1)
                 * 주제: 최애를 소개하는 라운지 토크
                 * 내용: 사과방 지구가 좋아하는 것을 소개하고, 다른 사람들의 취향을 살펴보며 공유하는 시간 (최대 3줄 정도 요약해주세요.)
@@ -232,6 +232,10 @@ class DiscordBot {
                     * 챌린지 기간 : 3월 31일(월) ~ 4월 30일(수)
                     * OT 모임 : 3/30(일) 오후 8시
                 * 장소: 온라인
+
+                예시4)
+                * 주제: 감사 챌린지 참여를 위한 온라인 그룹
+                * 내용: 긍정적인 마음가짐을 위해 매일 감사한 일을 공유하고 서로 응원하는 소규모 그룹 활동
 
                 다음은 요약할 글 정보입니다. 
                 ${post.content}`
