@@ -164,7 +164,10 @@ class DiscordBot {
         replyMessage += await this.GetChannelResponse(message, CHALLENGE_CH_ID, '[:parachute:｜파인딩 첼린지]\n');
         replyMessage += await this.GetChannelResponse(message, LOUNGE_TALK_CH_ID, '[🎙｜라운지토크]\n');
         replyMessage += await this.GetChannelResponse(message, FLEA_MARKET_CH_ID, '[💞｜재능플리마켓]\n');
-
+        replyMessage += await this.GetChannelResponse(message, "1348485773963427851", '[🎤｜파인더스 스테이지]\n');
+        replyMessage += await this.GetChannelResponse(message, "1346332405174243369", '[:raised_back_of_hand:｜게릴라게더링]\n');
+        replyMessage += await this.GetChannelResponse(message, "1144159465449467974", '[🤔｜고민상담소]\n');
+        
         message.reply(replyMessage);
     }
 
