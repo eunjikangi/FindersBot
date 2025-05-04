@@ -1204,64 +1204,29 @@ class DiscordBot {
                                             ],
                                         },
                                     },
-                                    // 정렬된 메시지와 답글 추가
-                                    ...sortedMessages.map(msg => {
-                                        switch (msg.type) {
-                                            case 'user_message':
-                                                return {
-                                                    object: 'block',
-                                                    type: 'callout',
-                                                    callout: {
-                                                        rich_text: [
-                                                            {
-                                                                text: {
-                                                                    content: `${msg.author}님의 메시지\n\n${msg.content}`,
-                                                                },
-                                                            },
-                                                        ],
-                                                        icon: {
-                                                            emoji: "💬"
+                                    // 모든 메시지와 답글 추가
+                                    ...thread.messages.map(msg => {
+                                        // 메시지가 사용자의 것인지 확인
+                                        const isUserMessage = msg.author === message.author.globalName;
+                                        const isReplyToUser = msg.originalAuthor === message.author.globalName;
+                                        
+                                        return {
+                                            object: 'block',
+                                            type: 'callout',
+                                            callout: {
+                                                rich_text: [
+                                                    {
+                                                        text: {
+                                                            content: `${msg.author}님의 메시지\n\n${msg.content}`,
                                                         },
-                                                        color: "green_background"
-                                                    }
-                                                };
-                                            case 'user_reply':
-                                                return {
-                                                    object: 'block',
-                                                    type: 'callout',
-                                                    callout: {
-                                                        rich_text: [
-                                                            {
-                                                                text: {
-                                                                    content: `${msg.author}님의 메시지\n\n ${msg.content}`,
-                                                                },
-                                                            },
-                                                        ],
-                                                        icon: {
-                                                            emoji: "↩️"
-                                                        },
-                                                        color: "yellow_background"
-                                                    }
-                                                };
-                                            case 'reply_to_user':
-                                                return {
-                                                    object: 'block',
-                                                    type: 'callout',
-                                                    callout: {
-                                                        rich_text: [
-                                                            {
-                                                                text: {
-                                                                    content: `${msg.author}님의 메시지\n\n ${msg.content}`,
-                                                                },
-                                                            },
-                                                        ],
-                                                        icon: {
-                                                            emoji: "↩️"
-                                                        },
-                                                        color: "purple_background"
-                                                    }
-                                                };
-                                        }
+                                                    },
+                                                ],
+                                                icon: {
+                                                    emoji: isUserMessage ? "💬" : (isReplyToUser ? "↩️" : "💭")
+                                                },
+                                                color: isUserMessage ? "green_background" : (isReplyToUser ? "yellow_background" : "gray_background")
+                                            }
+                                        };
                                     }),
                                 ],
                                 is_inline: true,
