@@ -191,7 +191,7 @@ class DiscordBot {
         } else if (message.content.startsWith('!update')) {
             message.reply("Discord 데이터를 업데이트하고 있습니다! 잠시만 기다려주세요:heart:");
             await this.updateDiscordData();
-        } else if (message.content.startsWith('!test')) {
+        } else if (message.content.startsWith('!report')) {
             message.reply("메시지를 노션으로 옮기고 있습니다! 잠시만 기다려주세요:heart:");
             await this.exportToNotion(message);
         }
@@ -1309,10 +1309,9 @@ class DiscordBot {
             const dbLinkMessage = `당신의 활동 기록을 확인하세요: ${userDbUrl}
 
 [사용 방법]
-1. 🍎다니님 템플릿을 복제한다! 또는 기존 템플릿을 연다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
-2. 활동기록 링크에 접속한다! (${userDbUrl})
-3. 활동기록 리스트를 복사하여 자신의 Notion Space로 옮긴 뒤 사용한다!
-
+1. 활동기록 링크에 접속하여 접근권한 신청! (제가 최대한 빨리 승인을 해보겠습니다:face_holding_back_tears:)
+2. 🍎다니님 템플릿을 자신의 Notion Space로 복제한다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
+3. 활동기록 리스트를 복사 -> 활동기록 List를 전체선택 -> Move to로 템플릿에 붙여넣기!
 
 :sparkles:
 파인더분들의 '나다운 일과 삶'을 응원합니다!!
@@ -1399,17 +1398,23 @@ class DiscordBot {
                     if (block.type === 'callout') {
                         const messageContent = block.callout.rich_text[0]?.text?.content || '';
                         if (messageContent.includes(userName)) {
-                            userMessages.push(messageContent);
+                            userMessages.push({
+                                content: messageContent,
+                                timestamp: block.created_time
+                            });
                         }
                     }
                 }
+
+                // 메시지를 시간순으로 정렬
+                userMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
                 activities.push({
                     title: page.properties['활동'].title[0]?.text?.content || '제목 없음',
                     type: activityType,
                     date: activityDate,
                     isHost: isHost,
-                    userMessages: userMessages
+                    userMessages: userMessages.map(msg => msg.content)
                 });
             }
 
@@ -1447,7 +1452,7 @@ class DiscordBot {
                     - 언제나처럼, 솔직한 마음과 존중하는 태도를 잊지 말아 주세요.
              
                     해당 내용을 바탕으로 요약을 해주시고, 포맷은 리포트 형식으로 해주세요.
-                    마지막으로 따뜻한 응원의 메시지를 포함해주세요!`
+                    마지막으로 따뜻한 응원의 메시지를 포함해주세요! 대답은 1900자 이하로 해주세요.`
                 },
                 {
                     role: 'user',
@@ -1569,17 +1574,31 @@ class DiscordBot {
                 ],
             });
 
-            // Discord에 분석 결과 전송 (1900자씩 나누어 전송)
-            const chunks = analysis.match(/.{1,1900}/g);
-            message.reply(`활동 분석이 완료되었어요! 노션에서 확인해보세요:heart:\n\n[분석 결과]`);
+            // 데이터베이스 공유 설정 업데이트
+            const updatedDb = await this.notion.databases.update({
+                database_id: userDbId,
+                is_inline: false
+            });
+
+            // 데이터베이스의 부모 페이지 공유 설정 업데이트
+            const parentPage = await this.notion.pages.retrieve({
+                page_id: userDb.parent.page_id
+            });
+
+            await this.notion.pages.update({
+                page_id: parentPage.id,
+                public_url: true,
+                permissions: [
+                    {
+                        type: 'public',
+                        access: 'full'
+                    }
+                ]
+            });
+
+            // 첫 번째 메시지 (노션 링크 포함) 전송
+            await message.reply(analysis);
             
-            for (let i = 0; i < chunks.length; i++) {
-                if (i === 0) {
-                    await message.reply(chunks[i]);
-                } else {
-                    await message.channel.send(chunks[i]);
-                }
-            }
         } catch (error) {
             console.error('활동 분석 중 오류 발생:', error);
             message.reply('활동 분석에 실패했어요. 다시 시도해주세요:heart:');
