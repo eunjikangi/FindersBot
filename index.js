@@ -195,7 +195,7 @@ class DiscordBot {
         } else if (message.content.startsWith('!update')) {
             message.reply("Discord 데이터를 업데이트하고 있습니다! 잠시만 기다려주세요:heart:");
             await this.updateDiscordData();
-        } else if (message.content.startsWith('!ex')) {
+        } else if (message.content.startsWith('!collect')) {
             message.reply("메시지를 노션으로 옮기고 있습니다! 잠시만 기다려주세요:heart:");
             await this.exportToNotion(message);
         }
@@ -764,7 +764,7 @@ class DiscordBot {
                         };
                         break;
                     case 'status':
-                        // status 타입은 options를 포함하지 않고 빈 객체로 설정
+                        // status 타입은 빈 객체로 설정
                         properties[key] = { 
                             type: 'status', 
                             status: {} 
@@ -887,25 +887,24 @@ class DiscordBot {
             // 2. 사용자 DB 확인 및 생성
             let userDbId = this.userDatabases.get(userName);
             let userDbUrl = null;
+            let database;
 
             if (!userDbId) {
                 const newDb = await this.createUserDatabase(userName);
                 userDbId = newDb.id;
                 userDbUrl = newDb.url;
-            } else {
-                // 기존 DB URL 가져오기
-                const db = await this.notion.databases.retrieve({
+                database = await this.notion.databases.retrieve({
                     database_id: userDbId,
                 });
-                userDbUrl = db.url;
+            } else {
+                // 기존 DB URL 가져오기
+                database = await this.notion.databases.retrieve({
+                    database_id: userDbId,
+                });
+                userDbUrl = database.url;
             }
 
             // 3. 데이터베이스 속성 가져오기
-            const database = await this.notion.databases.retrieve({
-                database_id: userDbId,
-            });
-            
-            // 활동 구분 속성이 없으면 생성
             if (!database.properties['활동 구분']) {
                 console.log('활동 구분 속성이 없어 새로 생성합니다.');
                 await this.notion.databases.update({
@@ -915,6 +914,24 @@ class DiscordBot {
                             select: {
                                 options: []
                             }
+                        }
+                    }
+                });
+                // 업데이트된 DB 정보 다시 가져오기
+                database = await this.notion.databases.retrieve({
+                    database_id: userDbId,
+                });
+            }
+
+            // 활동 상태 속성이 없으면 생성
+            if (!database.properties['활동 상태']) {
+                console.log('활동 상태 속성이 없어 새로 생성합니다.');
+                await this.notion.databases.update({
+                    database_id: userDbId,
+                    properties: {
+                        '활동 상태': {
+                            type: 'status',
+                            status: {}
                         }
                     }
                 });
@@ -1101,15 +1118,15 @@ class DiscordBot {
                                     date: {
                                         start: threadDate,
                                     },
-                                },
+                                }
                             };
 
                             // '활동 상태' 속성이 존재하는 경우에만 추가
                             if (database.properties['활동 상태']) {
                                 pageProperties['활동 상태'] = {
                                     status: {
-                                        name: '완료',
-                                    },
+                                        name: '완료'
+                                    }
                                 };
                             }
 
@@ -1264,17 +1281,18 @@ class DiscordBot {
             }
 
             // 6. 결과 메시지에 DB 링크 포함
-            const resultMessage = `메시지가 성공적으로 노션으로 옮겨졌습니다! (새로운 메시지: ${newMessages.length}개) :heart:\n\n`;
+            const resultMessage = `메시지가 성공적으로 노션으로 옮겨졌습니다! (새로운 메시지: ${newMessages.length}개) :heart:\n`;
             const dbLinkMessage = `당신의 활동 기록을 확인하세요: ${userDbUrl}
 
-            [사용 방법]
-            1. 🍎다니님 템플릿을 복제한다! 또는 기존 템플릿을 연다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
-            2. 활동기록 링크에 접속한다! (${userDbUrl})
-            3. 활동기록 리스트를 전체 선택하여 'Move to' 버튼을 통해 활동 기록을 다니님의 템플릿에 옮겨서 사용한다!
-            
-            :sparkles:
-            파인더분들의 '나다운 일과 삶'을 응원합니다.
-            조용하고 소소하게 일상 속 작은 도움을 주는 구두주걱 같은 삶을 꿈꾸는 은지캉 드림:gift_heart:`;
+[사용 방법]
+1. 🍎다니님 템플릿을 복제한다! 또는 기존 템플릿을 연다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
+2. 활동기록 링크에 접속한다! (${userDbUrl})
+3. 활동기록 리스트를 전체 선택하여 'Move to' 버튼을 통해 활동 기록을 다니님의 템플릿에 옮겨서 사용한다!
+
+
+:sparkles:
+파인더분들의 '나다운 일과 삶'을 응원합니다!!
+조용하고 소소하게 일상 속 작은 도움을 주는 구두주걱 같은 삶을 꿈꾸는 은지캉 드림:gift_heart:`;
             
             message.reply(resultMessage + dbLinkMessage);
 
@@ -1453,6 +1471,8 @@ class DiscordBot {
             };
 
             // DB에 존재하는 속성만 추가
+            console.log("userDb.properties" + userDb.properties);
+
             if (userDb.properties['활동 장소']) {
                 pageProperties['활동 장소'] = {
                     rich_text: [
@@ -1468,8 +1488,8 @@ class DiscordBot {
             if (userDb.properties['활동 상태']) {
                 pageProperties['활동 상태'] = {
                     status: {
-                        name: '완료',
-                    },
+                        name: '완료'
+                    }
                 };
             }
 
