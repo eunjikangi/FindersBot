@@ -198,9 +198,6 @@ class DiscordBot {
         } else if (message.content.startsWith('!ex')) {
             message.reply("메시지를 노션으로 옮기고 있습니다! 잠시만 기다려주세요:heart:");
             await this.exportToNotion(message);
-        } else if (message.content.startsWith('!analyze')) {
-            message.reply("당신의 활동을 분석하고 있어요! 잠시만 기다려주세요:heart:");
-            await this.analyzeNotionActivities(message);
         }
     }
 
@@ -567,10 +564,6 @@ class DiscordBot {
                 { id: FINDERS_STAGE_CH_ID, name: '파인더스 스테이지' },
                 { id: GATHERING_CH_ID, name: '게릴라-게더링' },
                 { id: THINK_CH_ID, name: '고민상담소' },
-                { id: GOODMORNING_CH_ID, name: '굿모닝' },
-                { id: SMALL_TRY_CH_ID, name: '스몰트라이' },
-                { id: SMALL_TALK_CH_ID, name: '스몰톡' },
-                { id: AFTER_TALK_CH_ID, name: '애프터톡' }
             ];
 
             const allChannelData = {};
@@ -625,15 +618,47 @@ class DiscordBot {
                         messages: []
                     };
 
+                    // 먼저 모든 메시지를 저장
                     for (const message of threadMessages.values()) {
-                        if (message.id !== starterMessage.id) { // 스타터 메시지는 이미 저장했으므로 제외
-                            threadContent.messages.push({
+                        if (message.id !== starterMessage.id) {
+                            const messageData = {
                                 id: message.id,
                                 author: message.author.globalName,
                                 content: message.content,
                                 timestamp: message.createdTimestamp,
                                 replies: []
-                            });
+                            };
+                            threadContent.messages.push(messageData);
+                        }
+                    }
+
+                    // 답글 관계 처리
+                    for (const message of threadMessages.values()) {
+                        if (message.id !== starterMessage.id && message.reference) {
+                            try {
+                                const referencedMessageId = message.reference.messageId;
+                                const originalMessage = threadContent.messages.find(m => m.id === referencedMessageId);
+                                const replyMessage = threadContent.messages.find(m => m.id === message.id);
+
+                                if (originalMessage && replyMessage) {
+                                    // 원본 메시지에 답글 정보 추가
+                                    if (!originalMessage.replies) {
+                                        originalMessage.replies = [];
+                                    }
+                                    originalMessage.replies.push({
+                                        id: replyMessage.id,
+                                        author: replyMessage.author,
+                                        content: replyMessage.content,
+                                        timestamp: replyMessage.timestamp
+                                    });
+
+                                    // 답글 메시지에 원본 정보 추가
+                                    replyMessage.originalMessage = originalMessage.content;
+                                    replyMessage.originalAuthor = originalMessage.author;
+                                }
+                            } catch (error) {
+                                console.error(`답글 관계 처리 중 오류 발생:`, error);
+                            }
                         }
                     }
 
@@ -655,14 +680,46 @@ class DiscordBot {
                     messages: []
                 };
 
+                // 먼저 모든 메시지를 저장
                 for (const message of channelMessages.values()) {
-                    channelContent.messages.push({
+                    const messageData = {
                         id: message.id,
                         author: message.author.globalName,
                         content: message.content,
                         timestamp: message.createdTimestamp,
                         replies: []
-                    });
+                    };
+                    channelContent.messages.push(messageData);
+                }
+
+                // 답글 관계 처리
+                for (const message of channelMessages.values()) {
+                    if (message.reference) {
+                        try {
+                            const referencedMessageId = message.reference.messageId;
+                            const originalMessage = channelContent.messages.find(m => m.id === referencedMessageId);
+                            const replyMessage = channelContent.messages.find(m => m.id === message.id);
+
+                            if (originalMessage && replyMessage) {
+                                // 원본 메시지에 답글 정보 추가
+                                if (!originalMessage.replies) {
+                                    originalMessage.replies = [];
+                                }
+                                originalMessage.replies.push({
+                                    id: replyMessage.id,
+                                    author: replyMessage.author,
+                                    content: replyMessage.content,
+                                    timestamp: replyMessage.timestamp
+                                });
+
+                                // 답글 메시지에 원본 정보 추가
+                                replyMessage.originalMessage = originalMessage.content;
+                                replyMessage.originalAuthor = originalMessage.author;
+                            }
+                        } catch (error) {
+                            console.error(`답글 관계 처리 중 오류 발생:`, error);
+                        }
+                    }
                 }
 
                 messages.push(channelContent);
@@ -848,18 +905,40 @@ class DiscordBot {
                 database_id: userDbId,
             });
             
+            // 활동 구분 속성이 없으면 생성
+            if (!database.properties['활동 구분']) {
+                console.log('활동 구분 속성이 없어 새로 생성합니다.');
+                await this.notion.databases.update({
+                    database_id: userDbId,
+                    properties: {
+                        '활동 구분': {
+                            select: {
+                                options: []
+                            }
+                        }
+                    }
+                });
+                // 업데이트된 DB 정보 다시 가져오기
+                database = await this.notion.databases.retrieve({
+                    database_id: userDbId,
+                });
+            }
+
             const activityTypeOptions = database.properties['활동 구분'].select.options;
-            console.log('활동 구분 옵션:', activityTypeOptions);
+            console.log('활동 구분 옵션:', JSON.stringify(activityTypeOptions, null, 2));
 
             const newMessages = [];
 
             // 4. 사용자의 메시지만 필터링하여 Notion에 추가
             for (const [channelId, channelData] of Object.entries(discordData)) {
                 try {
+                    console.log(`처리 중인 채널: ${channelData.name}`);
                     // 활동 구분 옵션에서 일치하는 항목 찾기
                     let matchingOption = activityTypeOptions.find(option => 
                         option.name.toLowerCase() === channelData.name.toLowerCase()
                     );
+
+                    console.log(`매칭된 옵션:`, matchingOption);
 
                     // 옵션이 없으면 새로 추가
                     if (!matchingOption) {
@@ -884,11 +963,39 @@ class DiscordBot {
                         matchingOption = updatedDatabase.properties['활동 구분'].select.options.find(
                             option => option.name.toLowerCase() === channelData.name.toLowerCase()
                         );
+                        console.log(`추가된 후 매칭된 옵션:`, matchingOption);
                     }
 
                     if (!matchingOption) {
                         console.error(`활동 구분 옵션을 찾을 수 없습니다: ${channelData.name}`);
                         continue;
+                    }
+
+                    // 기존 메시지 ID 목록 가져오기
+                    const existingPages = await this.notion.databases.query({
+                        database_id: userDbId,
+                        filter: {
+                            property: '활동 구분',
+                            select: {
+                                equals: matchingOption.name
+                            }
+                        }
+                    });
+
+                    const existingMessageIds = new Set();
+                    for (const page of existingPages.results) {
+                        const blocks = await this.notion.blocks.children.list({
+                            block_id: page.id
+                        });
+                        for (const block of blocks.results) {
+                            if (block.type === 'callout' && block.callout.rich_text[0]?.text?.content) {
+                                const content = block.callout.rich_text[0].text.content;
+                                const match = content.match(/ID: (\d+)/);
+                                if (match) {
+                                    existingMessageIds.add(match[1]);
+                                }
+                            }
+                        }
                     }
 
                     // 사용자의 메시지만 필터링
@@ -897,15 +1004,62 @@ class DiscordBot {
                         const isUserThread = thread.starterMessage && 
                                            thread.starterMessage.author === message.author.globalName;
 
-                        // 사용자의 댓글만 필터링
-                        const userMessages = thread.messages.filter(msg => 
-                            msg.author === message.author.globalName
-                        );
+                        // 사용자와 관련된 모든 댓글과 답글 찾기
+                        const relatedMessages = [];
+                        const processedMessageIds = new Set();
 
-                        // 스레드가 사용자의 것이거나 사용자의 댓글이 있는 경우
-                        if (isUserThread || userMessages.length > 0) {
-                            // 댓글을 시간순으로 정렬
-                            const sortedMessages = [...userMessages].sort((a, b) => 
+                        for (const msg of thread.messages) {
+                            // 이미 존재하는 메시지는 건너뛰기
+                            if (existingMessageIds.has(msg.id)) {
+                                continue;
+                            }
+
+                            // 사용자가 작성한 메시지
+                            if (msg.author === message.author.globalName) {
+                                relatedMessages.push({
+                                    ...msg,
+                                    type: 'user_message'
+                                });
+                                processedMessageIds.add(msg.id);
+                                
+                                // 사용자의 메시지에 대한 답글
+                                if (msg.replies && msg.replies.length > 0) {
+                                    for (const reply of msg.replies) {
+                                        if (!processedMessageIds.has(reply.id) && !existingMessageIds.has(reply.id)) {
+                                            relatedMessages.push({
+                                                ...reply,
+                                                type: 'reply_to_user',
+                                                originalMessage: msg.content,
+                                                originalAuthor: msg.author
+                                            });
+                                            processedMessageIds.add(reply.id);
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // 사용자가 답글을 단 메시지
+                            if (msg.replies && msg.replies.length > 0) {
+                                for (const reply of msg.replies) {
+                                    if (reply.author === message.author.globalName && 
+                                        !processedMessageIds.has(reply.id) && 
+                                        !existingMessageIds.has(reply.id)) {
+                                        relatedMessages.push({
+                                            ...reply,
+                                            type: 'user_reply',
+                                            originalMessage: msg.content,
+                                            originalAuthor: msg.author
+                                        });
+                                        processedMessageIds.add(reply.id);
+                                    }
+                                }
+                            }
+                        }
+
+                        // 스레드가 사용자의 것이거나 관련 메시지가 있는 경우
+                        if (isUserThread || relatedMessages.length > 0) {
+                            // 메시지를 시간순으로 정렬
+                            const sortedMessages = [...relatedMessages].sort((a, b) => 
                                 a.timestamp - b.timestamp
                             );
 
@@ -1003,8 +1157,8 @@ class DiscordBot {
                                     // 스레드 내용 추가
                                     {
                                         object: 'block',
-                                        type: 'paragraph',
-                                        paragraph: {
+                                        type: 'callout',
+                                        callout: {
                                             rich_text: [
                                                 {
                                                     text: {
@@ -1014,7 +1168,11 @@ class DiscordBot {
                                                     },
                                                 },
                                             ],
-                                        },
+                                            icon: {
+                                                emoji: "📝"
+                                            },
+                                            color: "gray_background"
+                                        }
                                     },
                                     {
                                         object: 'block',
@@ -1023,26 +1181,71 @@ class DiscordBot {
                                             rich_text: [
                                                 {
                                                     text: {
-                                                        content: '댓글',
+                                                        content: '대화 내용',
                                                     },
                                                 },
                                             ],
                                         },
                                     },
-                                    // 정렬된 댓글 추가
-                                    ...sortedMessages.map(msg => ({
-                                        object: 'block',
-                                        type: 'paragraph',
-                                        paragraph: {
-                                            rich_text: [
-                                                {
-                                                    text: {
-                                                        content: `${msg.author}: ${msg.content}`,
-                                                    },
-                                                },
-                                            ],
-                                        },
-                                    })),
+                                    // 정렬된 메시지와 답글 추가
+                                    ...sortedMessages.map(msg => {
+                                        switch (msg.type) {
+                                            case 'user_message':
+                                                return {
+                                                    object: 'block',
+                                                    type: 'callout',
+                                                    callout: {
+                                                        rich_text: [
+                                                            {
+                                                                text: {
+                                                                    content: `${msg.author}님의 메시지\n\n${msg.content}`,
+                                                                },
+                                                            },
+                                                        ],
+                                                        icon: {
+                                                            emoji: "💬"
+                                                        },
+                                                        color: "green_background"
+                                                    }
+                                                };
+                                            case 'user_reply':
+                                                return {
+                                                    object: 'block',
+                                                    type: 'callout',
+                                                    callout: {
+                                                        rich_text: [
+                                                            {
+                                                                text: {
+                                                                    content: `${msg.author}님의 메시지\n\n ${msg.content}`,
+                                                                },
+                                                            },
+                                                        ],
+                                                        icon: {
+                                                            emoji: "↩️"
+                                                        },
+                                                        color: "yellow_background"
+                                                    }
+                                                };
+                                            case 'reply_to_user':
+                                                return {
+                                                    object: 'block',
+                                                    type: 'callout',
+                                                    callout: {
+                                                        rich_text: [
+                                                            {
+                                                                text: {
+                                                                    content: `${msg.author}님의 메시지\n\n ${msg.content}`,
+                                                                },
+                                                            },
+                                                        ],
+                                                        icon: {
+                                                            emoji: "↩️"
+                                                        },
+                                                        color: "purple_background"
+                                                    }
+                                                };
+                                        }
+                                    }),
                                 ],
                             });
 
@@ -1055,17 +1258,26 @@ class DiscordBot {
                 }
             }
 
+            // 7. 새로운 메시지가 있으면 분석 실행
+            if (newMessages.length > 0) {
+                await this.analyzeNotionActivities(message);
+            }
+
             // 6. 결과 메시지에 DB 링크 포함
             const resultMessage = `메시지가 성공적으로 노션으로 옮겨졌습니다! (새로운 메시지: ${newMessages.length}개) :heart:\n\n`;
-            const dbLinkMessage = `당신의 활동 기록을 확인하세요: ${userDbUrl}`;
+            const dbLinkMessage = `당신의 활동 기록을 확인하세요: ${userDbUrl}
+
+            [사용 방법]
+            1. 🍎다니님 템플릿을 복제한다! 또는 기존 템플릿을 연다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
+            2. 활동기록 링크에 접속한다! (${userDbUrl})
+            3. 활동기록 리스트를 전체 선택하여 'Move to' 버튼을 통해 활동 기록을 다니님의 템플릿에 옮겨서 사용한다!
+            
+            :sparkles:
+            파인더분들의 '나다운 일과 삶'을 응원합니다.
+            조용하고 소소하게 일상 속 작은 도움을 주는 구두주걱 같은 삶을 꿈꾸는 은지캉 드림:gift_heart:`;
             
             message.reply(resultMessage + dbLinkMessage);
 
-            // 7. 새로운 메시지가 있으면 분석 실행
-            if (newMessages.length > 0) {
-                message.reply("활동을 분석하고 있어요! 잠시만 기다려주세요:heart:");
-                await this.analyzeNotionActivities(message);
-            }
         } catch (error) {
             console.error('노션으로 내보내기 실패:', error);
             message.reply('메시지를 노션으로 옮기는데 실패했습니다. 다시 시도해주세요.');
@@ -1096,19 +1308,32 @@ class DiscordBot {
                 }
             }
 
-            // 2. Notion DB에서 사용자의 활동 가져오기
+            // 2. 사용자 DB에서 활동 가져오기
+            const userName = message.author.globalName;
+            const userDbId = this.userDatabases.get(userName);
+
+            if (!userDbId) {
+                message.reply("먼저 !ex 명령어로 활동을 저장해주세요:heart:");
+                return;
+            }
+
+            // 사용자 DB의 속성 구조 확인
+            const userDb = await this.notion.databases.retrieve({
+                database_id: userDbId,
+            });
+
             const notionPages = await this.notion.databases.query({
-                database_id: process.env.NOTION_DATABASE_ID,
+                database_id: userDbId,
                 filter: {
                     property: '주최자',
                     rich_text: {
-                        equals: message.author.globalName
+                        equals: userName
                     }
                 }
             });
 
             if (notionPages.results.length === 0) {
-                message.reply("아직 노션에 저장된 활동이 없어요! 먼저 !export 명령어로 활동을 저장해주세요:heart:");
+                message.reply("아직 노션에 저장된 활동이 없어요! 먼저 !ex 명령어로 활동을 저장해주세요:heart:");
                 return;
             }
 
@@ -1146,56 +1371,39 @@ class DiscordBot {
             const analysisPrompt = [
                 {
                     role: 'system',
-                    content: `당신은 사용자의 디스코드 활동을 분석하고 응원하는 AI입니다. 
-                    사용자의 자기소개와 활동 내용을 분석하여 다음과 같은 관점에서 다정하고 따뜻한 말투로 응답해주세요:
+                    content: `당신은 파인더스 클럽 이라는 커뮤니티의 디스코드 활동을 분석하고 응원하는 AI입니다.
+                    당신은 다정하고 깜찍하고 활기찬 말투의 소유자에요.
                     
-                    1. 자기소개와 목표 분석
-                    - 커뮤니티 참여 동기와 목표
-                    - 자신이 밝힌 관심사와 특기
-                    - 기대하는 바와 희망사항
+                    아래 제공된 사용자 활동 데이터, 댓글 내용, 자기소개글, 관심사 태그, 참여 기록, 목표 설정 정보 등을 바탕으로, 파인더스 클럽의 중요한 취지—즉, '나다운 일과 삶을 찾기', '서로의 경험과 관심사를 존중하며 함께 성장하기'—에 부합하는 따뜻하고 의미 있는 분석을 진행해 주세요.
+                    이 분석은 사용자 개개인이 자신의 이야기를 깊이 있게 돌아보고, 예상치 못한 가능성과 강점을 발견할 수 있도록 도움을 주는 것을 목표로 합니다.
                     
-                    2. 관심사와 참여 패턴
-                    - 어떤 주제에 가장 관심이 많은지
-                    - 어떤 활동을 자주 하는지
-                    - 특별히 열정적인 분야가 있는지
-                    - 자기소개에서 밝힌 관심사와 실제 활동의 연관성
+                    - 사용자가 처음 세운 목표 또는 탐구 주제에 대해 얼마나 성취했고, 어떤 방향으로 성장하고 있는지 따뜻하게 평가해 주세요.
+                    - 성과와 동시에 부족한 부분이나 더 도전해보고 싶은 점도 자연스럽게 피드백해 주세요.
                     
-                    3. 성장과 변화
-                    - 시간이 지나면서 관심사가 어떻게 변화했는지
-                    - 어떤 새로운 도전을 시도했는지
-                    - 자기소개에서 밝힌 목표에 대한 진척 상황
-                    - 어떤 성장이 있었는지
+ 
+                    - 활동 기록, 자기소개, 태그 및 참여 내용 등을 분석하여, 사용자 자신이 자연스럽게 끌리는 관심사와 강점을 도출해 주세요.
+                    - 이 과정에서 배려심, 자기주도성, 창의성, 공감력 등 사용자의 고유한 성격과 특성도 함께 살펴봐 주세요.
                     
-                    4. 의미와 성취
-                    - 활동이 어떤 의미를 가졌는지
-                    - 어떤 목표를 이룬 것 같은지
-                    - 자기소개에서 밝힌 기대사항이 어떻게 실현되었는지
-                    - 앞으로의 발전 가능성
+           
+                    - 활동하며 느꼈던 감정 또는 의미 부여했던 순간, 그리고 감동 혹은 자랑스러웠던 경험을 부드럽고 따뜻한 어조로 정리해 주세요.
+                    - 이 과정이 '나다운 나'를 더 잘 이해하고, 서로를 존중하는 클럽의 정신과 어떻게 어우러지는지도 함께 표현해 주세요.
                     
-                    5. 개인적인 응원과 제안
-                    - 자기소개에서 밝힌 목표를 위한 구체적인 제안
-                    - 관심사에 맞는 새로운 활동 제안
-                    - 성장을 위한 조언
+
+                    - 활동 빈도, 참여한 채널이나 경험들이 어떤 방향성을 보여주는지 평가해 주세요.
+                    - 지금까지의 활동이 사용자에게 어떤 성취감 또는 성장의 징후를 보여주는지 함께 설명해 주세요.
                     
-                    응답은 다음과 같은 형식으로 작성해주세요:
+ 
+                    - 사용자님이 관심 갖고 있는 주제 또는 강점을 더 깊게 탐구하거나, 새로운 경험으로 확장할 수 있는 따뜻한 추천을 해 주세요.
+                    - '나다운 일과 삶을 만들어 가는' 길에 도움이 될 만한 제언도 포함해 주세요.
+
+
+                    - 지금까지의 활동과 분석 내용을 간단히 정리하며, 사용자가 자신의 이야기를 통해 앞으로 어떻게 성장할 수 있을지에 대한 작은 응원과 조언을 적어 주세요.
                     
-                    안녕하세요! 당신의 자기소개와 활동을 함께 분석해보았어요:heart:
-                    
-                    [자기소개와 목표 분석]
-                    ...
-                    
-                    [관심사와 참여 패턴]
-                    ...
-                    
-                    [성장과 변화]
-                    ...
-                    
-                    [의미와 성취]
-                    ...
-                    
-                    [개인적인 응원과 제안]
-                    ...
-                    
+                    주의 사항
+                    - 이 분석은, 사용자 한 사람 한 사람의 내면과 잠재력을 존중하고, 따뜻한 마음으로 읽기 쉽고 격려하는 표현을 담아 작성해 주세요.
+                    - 언제나처럼, 솔직한 마음과 존중하는 태도를 잊지 말아 주세요.
+             
+                    해당 내용을 바탕으로 요약을 해주시고, 포맷은 리포트 형식으로 해주세요.
                     마지막으로 따뜻한 응원의 메시지를 포함해주세요!`
                 },
                 {
@@ -1212,55 +1420,64 @@ class DiscordBot {
 
             const analysis = await this.openAIService.getResponse(analysisPrompt);
 
-            // 5. 분석 결과를 Notion에 저장
+            // 5. 분석 결과를 사용자 DB에 저장
+            const pageProperties = {
+                '활동': {
+                    title: [
+                        {
+                            text: {
+                                content: `${userName}님의 활동 분석 리포트`,
+                            },
+                        },
+                    ],
+                },
+                '활동 구분': {
+                    select: {
+                        name: '활동 리포트',
+                    },
+                },
+                '주최자': {
+                    rich_text: [
+                        {
+                            text: {
+                                content: 'AI 분석',
+                            },
+                        },
+                    ],
+                },
+                '활동 날짜': {
+                    date: {
+                        start: new Date().toISOString(),
+                    },
+                },
+            };
+
+            // DB에 존재하는 속성만 추가
+            if (userDb.properties['활동 장소']) {
+                pageProperties['활동 장소'] = {
+                    rich_text: [
+                        {
+                            text: {
+                                content: '디스코드',
+                            },
+                        },
+                    ],
+                };
+            }
+
+            if (userDb.properties['활동 상태']) {
+                pageProperties['활동 상태'] = {
+                    status: {
+                        name: '완료',
+                    },
+                };
+            }
+
             const analysisPage = await this.notion.pages.create({
                 parent: {
-                    database_id: process.env.NOTION_DATABASE_ID,
+                    database_id: userDbId,
                 },
-                properties: {
-                    '활동': {
-                        title: [
-                            {
-                                text: {
-                                    content: `${message.author.globalName}님의 활동 분석 리포트`,
-                                },
-                            },
-                        ],
-                    },
-                    '활동 구분': {
-                        select: {
-                            name: '활동 리포트',
-                        },
-                    },
-                    '주최자': {
-                        rich_text: [
-                            {
-                                text: {
-                                    content: 'AI 분석',
-                                },
-                            },
-                        ],
-                    },
-                    '활동 장소': {
-                        rich_text: [
-                            {
-                                text: {
-                                    content: '디스코드',
-                                },
-                            },
-                        ],
-                    },
-                    '활동 상태': {
-                        status: {
-                            name: '완료',
-                        },
-                    },
-                    '활동 날짜': {
-                        date: {
-                            start: new Date().toISOString(),
-                        },
-                    },
-                },
+                properties: pageProperties,
                 children: [
                     {
                         object: 'block',
@@ -1269,7 +1486,7 @@ class DiscordBot {
                             rich_text: [
                                 {
                                     text: {
-                                        content: `${message.author.globalName}님의 활동 분석 리포트`,
+                                        content: `${userName}님의 활동 분석 리포트`,
                                     },
                                 },
                             ],
