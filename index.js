@@ -1264,6 +1264,21 @@ class DiscordBot {
                                         }
                                     }),
                                 ],
+                                is_inline: true,
+                                public_url: true
+                            });
+
+                            // 페이지 공유 설정 업데이트
+                            await this.notion.pages.update({
+                                page_id: notionPage.id,
+                                properties: {},
+                                public_url: true,
+                                permissions: [
+                                    {
+                                        type: 'public',
+                                        access: 'full'
+                                    }
+                                ]
                             });
 
                             newMessages.push(thread.name);
