@@ -1302,7 +1302,7 @@ class DiscordBot {
 [사용 방법]
 1. 🍎다니님 템플릿을 복제한다! 또는 기존 템플릿을 연다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
 2. 활동기록 링크에 접속한다! (${userDbUrl})
-3. 활동기록 리스트를 전체 선택하여 'Move to' 버튼을 통해 활동 기록을 다니님의 템플릿에 옮겨서 사용한다!
+3. 활동기록 리스트를 복사하여 자신의 Notion Space로 옮긴 뒤 사용한다!
 
 
 :sparkles:
