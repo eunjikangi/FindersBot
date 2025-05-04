@@ -955,18 +955,12 @@ class DiscordBot {
             const userName = message.author.globalName;
 
             // 2. 사용자 DB 확인 및 생성
-            let userDb = await this.getUserDatabase(userName);
-            let userDbId = userDb?.id;
-            let userDbUrl = userDb?.url;
-
-            if (!userDbId) {
-                const newDb = await this.createUserDatabase(userName);
-                userDbId = newDb.id;
-                userDbUrl = newDb.url;
-                userDb = await this.notion.databases.retrieve({
-                    database_id: userDbId,
-                });
-            }
+            const newDb = await this.createUserDatabase(userName);
+            let userDbId = newDb.id;
+            let userDbUrl = newDb.url;
+            let userDb = await this.notion.databases.retrieve({
+                database_id: userDbId,
+            });
 
             // 3. 데이터베이스 속성 가져오기
             if (!userDb.properties['활동 구분']) {
