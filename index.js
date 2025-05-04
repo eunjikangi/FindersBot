@@ -113,6 +113,31 @@ class DiscordBot {
         this.notion = new NotionClient({
             auth: process.env.NOTION_TOKEN,
         });
+
+        this.userDatabases = new Map(); // 사용자별 DB ID 저장을 위한 Map
+        this.loadUserDatabases(); // 시작 시 DB 정보 로드
+    }
+
+    loadUserDatabases() {
+        try {
+            const dbPath = path.join(__dirname, 'userDatabases.json');
+            if (fs.existsSync(dbPath)) {
+                const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
+                this.userDatabases = new Map(Object.entries(data));
+            }
+        } catch (error) {
+            console.error('사용자 DB 정보 로드 실패:', error);
+        }
+    }
+
+    saveUserDatabases() {
+        try {
+            const dbPath = path.join(__dirname, 'userDatabases.json');
+            const data = Object.fromEntries(this.userDatabases);
+            fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+        } catch (error) {
+            console.error('사용자 DB 정보 저장 실패:', error);
+        }
     }
 
     async start() {
@@ -170,7 +195,7 @@ class DiscordBot {
         } else if (message.content.startsWith('!update')) {
             message.reply("Discord 데이터를 업데이트하고 있습니다! 잠시만 기다려주세요:heart:");
             await this.updateDiscordData();
-        } else if (message.content.startsWith('!export')) {
+        } else if (message.content.startsWith('!ex')) {
             message.reply("메시지를 노션으로 옮기고 있습니다! 잠시만 기다려주세요:heart:");
             await this.exportToNotion(message);
         } else if (message.content.startsWith('!analyze')) {
@@ -540,7 +565,7 @@ class DiscordBot {
                 { id: LOUNGE_TALK_CH_ID, name: '라운지토크' },
                 { id: FLEA_MARKET_CH_ID, name: '재능플리마켓' },
                 { id: FINDERS_STAGE_CH_ID, name: '파인더스 스테이지' },
-                { id: GATHERING_CH_ID, name: '게릴라게더링' },
+                { id: GATHERING_CH_ID, name: '게릴라-게더링' },
                 { id: THINK_CH_ID, name: '고민상담소' },
                 { id: GOODMORNING_CH_ID, name: '굿모닝' },
                 { id: SMALL_TRY_CH_ID, name: '스몰트라이' },
@@ -649,6 +674,147 @@ class DiscordBot {
         return messages;
     }
 
+    async createUserDatabase(userName) {
+        try {
+            // 1. 기존 DB의 스키마 가져오기
+            const templateDb = await this.notion.databases.retrieve({
+                database_id: process.env.NOTION_DATABASE_ID,
+            });
+
+            // 템플릿 DB 속성 로깅
+            console.log('Template DB Properties:', JSON.stringify(templateDb.properties, null, 2));
+
+            // 2. 속성 복사
+            const properties = {};
+            for (const [key, value] of Object.entries(templateDb.properties)) {
+                // 각 속성 타입에 따른 처리
+                switch (value.type) {
+                    case 'title':
+                        properties[key] = { type: 'title', title: {} };
+                        break;
+                    case 'rich_text':
+                        properties[key] = { type: 'rich_text', rich_text: {} };
+                        break;
+                    case 'select':
+                        properties[key] = { 
+                            type: 'select', 
+                            select: { 
+                                options: value.select.options.map(option => ({
+                                    name: option.name,
+                                    color: option.color
+                                }))
+                            }
+                        };
+                        break;
+                    case 'status':
+                        // status 타입은 options를 포함하지 않고 빈 객체로 설정
+                        properties[key] = { 
+                            type: 'status', 
+                            status: {} 
+                        };
+                        break;
+                    case 'date':
+                        properties[key] = { type: 'date', date: {} };
+                        break;
+                    case 'multi_select':
+                        properties[key] = { 
+                            type: 'multi_select', 
+                            multi_select: { 
+                                options: value.multi_select.options.map(option => ({
+                                    name: option.name,
+                                    color: option.color
+                                }))
+                            }
+                        };
+                        break;
+                    case 'number':
+                        properties[key] = { 
+                            type: 'number', 
+                            number: value.number 
+                        };
+                        break;
+                    case 'checkbox':
+                        properties[key] = { type: 'checkbox', checkbox: {} };
+                        break;
+                    case 'url':
+                        properties[key] = { type: 'url', url: {} };
+                        break;
+                    case 'email':
+                        properties[key] = { type: 'email', email: {} };
+                        break;
+                    case 'phone_number':
+                        properties[key] = { type: 'phone_number', phone_number: {} };
+                        break;
+                    case 'formula':
+                        properties[key] = { 
+                            type: 'formula', 
+                            formula: value.formula 
+                        };
+                        break;
+                    case 'relation':
+                        properties[key] = { 
+                            type: 'relation', 
+                            relation: value.relation 
+                        };
+                        break;
+                    case 'rollup':
+                        properties[key] = { 
+                            type: 'rollup', 
+                            rollup: value.rollup 
+                        };
+                        break;
+                    case 'created_time':
+                        properties[key] = { type: 'created_time', created_time: {} };
+                        break;
+                    case 'created_by':
+                        properties[key] = { type: 'created_by', created_by: {} };
+                        break;
+                    case 'last_edited_time':
+                        properties[key] = { type: 'last_edited_time', last_edited_time: {} };
+                        break;
+                    case 'last_edited_by':
+                        properties[key] = { type: 'last_edited_by', last_edited_by: {} };
+                        break;
+                    default:
+                        properties[key] = value;
+                }
+            }
+
+            // 3. 새로운 DB 생성
+            const newDb = await this.notion.databases.create({
+                parent: {
+                    type: "page_id",
+                    page_id: process.env.NOTION_WORKSPACE_PAGE_ID,
+                },
+                title: [
+                    {
+                        type: "text",
+                        text: {
+                            content: `${userName}님의 디스코드 활동 기록`,
+                        },
+                    },
+                ],
+                properties: properties,
+                is_inline: templateDb.is_inline,
+                description: templateDb.description,
+                icon: templateDb.icon,
+                cover: templateDb.cover,
+            });
+
+            // 4. DB ID 저장
+            this.userDatabases.set(userName, newDb.id);
+            this.saveUserDatabases(); // 변경사항 저장
+
+            return {
+                id: newDb.id,
+                url: newDb.url,
+            };
+        } catch (error) {
+            console.error('사용자 DB 생성 실패:', error);
+            throw error;
+        }
+    }
+
     async exportToNotion(message) {
         try {
             // 1. 저장된 Discord 데이터 로드
@@ -659,18 +825,27 @@ class DiscordBot {
             }
 
             const discordData = JSON.parse(await fs.promises.readFile(cachePath, 'utf8'));
+            const userName = message.author.globalName;
 
-            // 2. Notion DB에서 기존 제목 가져오기
-            const notionPages = await this.notion.databases.query({
-                database_id: process.env.NOTION_DATABASE_ID,
-            });
-            const notionTitles = new Set(notionPages.results.map(page => 
-                page.properties['활동'].title[0]?.text?.content
-            ).filter(Boolean));
+            // 2. 사용자 DB 확인 및 생성
+            let userDbId = this.userDatabases.get(userName);
+            let userDbUrl = null;
+
+            if (!userDbId) {
+                const newDb = await this.createUserDatabase(userName);
+                userDbId = newDb.id;
+                userDbUrl = newDb.url;
+            } else {
+                // 기존 DB URL 가져오기
+                const db = await this.notion.databases.retrieve({
+                    database_id: userDbId,
+                });
+                userDbUrl = db.url;
+            }
 
             // 3. 데이터베이스 속성 가져오기
             const database = await this.notion.databases.retrieve({
-                database_id: process.env.NOTION_DATABASE_ID,
+                database_id: userDbId,
             });
             
             const activityTypeOptions = database.properties['활동 구분'].select.options;
@@ -690,7 +865,7 @@ class DiscordBot {
                     if (!matchingOption) {
                         console.log(`새로운 활동 구분 추가: ${channelData.name}`);
                         const updatedDatabase = await this.notion.databases.update({
-                            database_id: process.env.NOTION_DATABASE_ID,
+                            database_id: userDbId,
                             properties: {
                                 '활동 구분': {
                                     select: {
@@ -742,55 +917,62 @@ class DiscordBot {
                                 new Date(thread.starterMessage.timestamp).toISOString() : 
                                 new Date().toISOString();
 
+                            // 페이지 속성 정의
+                            const pageProperties = {
+                                '활동': {
+                                    title: [
+                                        {
+                                            text: {
+                                                content: thread.name,
+                                            },
+                                        },
+                                    ],
+                                },
+                                '활동 구분': {
+                                    select: {
+                                        id: matchingOption.id,
+                                        name: matchingOption.name,
+                                    },
+                                },
+                                '주최자': {
+                                    rich_text: [
+                                        {
+                                            text: {
+                                                content: threadAuthor,
+                                            },
+                                        },
+                                    ],
+                                },
+                                '활동 날짜': {
+                                    date: {
+                                        start: threadDate,
+                                    },
+                                },
+                            };
+
+                            // '활동 상태' 속성이 존재하는 경우에만 추가
+                            if (database.properties['활동 상태']) {
+                                pageProperties['활동 상태'] = {
+                                    status: {
+                                        name: '완료',
+                                    },
+                                };
+                            }
+
+                            // '역할' 속성이 존재하는 경우에만 추가
+                            if (database.properties['역할']) {
+                                pageProperties['역할'] = {
+                                    select: {
+                                        name: isUserThread ? '주최' : '참여',
+                                    },
+                                };
+                            }
+
                             const notionPage = await this.notion.pages.create({
                                 parent: {
-                                    database_id: process.env.NOTION_DATABASE_ID,
+                                    database_id: userDbId,
                                 },
-                                properties: {
-                                    '활동': {
-                                        title: [
-                                            {
-                                                text: {
-                                                    content: thread.name,
-                                                },
-                                            },
-                                        ],
-                                    },
-                                    '활동 구분': {
-                                        select: {
-                                            id: matchingOption.id,
-                                            name: matchingOption.name,
-                                        },
-                                    },
-                                    '주최자': {
-                                        rich_text: [
-                                            {
-                                                text: {
-                                                    content: threadAuthor,
-                                                },
-                                            },
-                                        ],
-                                    },
-                                    '활동 장소': {
-                                        rich_text: [
-                                            {
-                                                text: {
-                                                    content: '디스코드',
-                                                },
-                                            },
-                                        ],
-                                    },
-                                    '활동 상태': {
-                                        status: {
-                                            name: '완료',
-                                        },
-                                    },
-                                    '활동 날짜': {
-                                        date: {
-                                            start: threadDate,
-                                        },
-                                    },
-                                },
+                                properties: pageProperties,
                                 children: [
                                     {
                                         object: 'block',
@@ -873,9 +1055,13 @@ class DiscordBot {
                 }
             }
 
-            message.reply(`메시지가 성공적으로 노션으로 옮겨졌습니다! (새로운 메시지: ${newMessages.length}개) :heart:`);
+            // 6. 결과 메시지에 DB 링크 포함
+            const resultMessage = `메시지가 성공적으로 노션으로 옮겨졌습니다! (새로운 메시지: ${newMessages.length}개) :heart:\n\n`;
+            const dbLinkMessage = `당신의 활동 기록을 확인하세요: ${userDbUrl}`;
+            
+            message.reply(resultMessage + dbLinkMessage);
 
-            // 5. 새로운 메시지가 있으면 분석 실행
+            // 7. 새로운 메시지가 있으면 분석 실행
             if (newMessages.length > 0) {
                 message.reply("활동을 분석하고 있어요! 잠시만 기다려주세요:heart:");
                 await this.analyzeNotionActivities(message);
