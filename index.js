@@ -52,6 +52,8 @@ const FLEA_MARKET_CH_ID = '1346332310211006534';
 const FINDERS_STAGE_CH_ID = '1348485773963427851';
 const GATHERING_CH_ID = '1346332405174243369';
 const THINK_CH_ID = '1144159465449467974';
+const INTERVIEW_CH_ID = '1346331812863148114';
+const INTERVIEW_ZIP_CH_ID = '1346332033424687114';
 
 const GOODMORNING_CH_ID = '1346332674322731089';
 const SMALL_TRY_CH_ID = '1346333285814505502';
@@ -560,6 +562,8 @@ class DiscordBot {
                 { id: FINDERS_STAGE_CH_ID, name: '파인더스 스테이지' },
                 { id: GATHERING_CH_ID, name: '게릴라-게더링' },
                 { id: THINK_CH_ID, name: '고민상담소' },
+                { id: INTERVIEW_CH_ID, name: '1:1인터뷰' },
+                { id: INTERVIEW_ZIP_CH_ID, name: '1:1인터뷰집' },
             ];
 
             const allChannelData = {};
