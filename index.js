@@ -1304,8 +1304,10 @@ class DiscordBot {
 
 [사용 방법]
 1. 활동기록 링크에 접속하여 접근권한 신청! (제가 최대한 빨리 승인을 해보겠습니다:face_holding_back_tears:)
-2. 🍎다니님 템플릿을 자신의 Notion Space로 복제한다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
-3. 활동기록 리스트를 복사 -> 활동기록 List를 전체선택 -> Move to로 템플릿에 붙여넣기!
+2. 활동기록 DB 페이지 자체를 My workspace에 복제한다! (좌측 땡땡땡 버튼 -> Duplicate to -> My Workspace)
+3. 🍎다니님 템플릿을 자신의 Notion Space로 복제한다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
+4. 복제된 DB에서 move to 를 사용하여 다니님 템플릿으로 페이지 옮기기!
+
 
 :sparkles:
 파인더분들의 '나다운 일과 삶'을 응원합니다!!
