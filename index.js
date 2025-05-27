@@ -26,7 +26,7 @@ class OpenAIService {
 
     async getResponse(messages) {
         const response = await this.openai.chat.completions.create({
-            model: 'gpt-4.1',
+            model: 'gpt-4-turbo',
             messages: messages,
         });
         return response.choices[0].message.content;
@@ -190,10 +190,10 @@ class DiscordBot {
             } else {
                 await this.GetIamFinderPosts(message, userName);
             }
-        } else if (message.content.startsWith('!update')) {
+        } else if (message.content.startsWith('!up')) {
             message.reply("Discord 데이터를 업데이트하고 있습니다! 잠시만 기다려주세요:heart:");
             await this.updateDiscordData();
-        } else if (message.content.startsWith('!report')) {
+        } else if (message.content.startsWith('!re')) {
             message.reply("메시지를 노션으로 옮기고 있습니다! 잠시만 기다려주세요:heart:");
             await this.exportToNotion(message);
         }
@@ -1307,11 +1307,12 @@ class DiscordBot {
             const dbLinkMessage = `당신의 활동 기록을 확인하세요: ${userDbUrl}
 
 [사용 방법]
-1. 활동기록 링크에 접속하여 접근권한 신청! (제가 최대한 빨리 승인을 해보겠습니다:face_holding_back_tears:)
+https://discord.com/channels/1133390614944301126/1346333747544588308/1368893906653020260
+
+1. 노션페이지 접근권한 신청! (제가 최대한 빨리 승인을 해보겠습니다:face_holding_back_tears:)
 2. 활동기록 DB 페이지 자체를 My workspace에 복제한다! (좌측 땡땡땡 버튼 -> Duplicate to -> My Workspace)
 3. 🍎다니님 템플릿을 자신의 Notion Space로 복제한다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
 4. 복제된 DB에서 move to 를 사용하여 다니님 템플릿으로 페이지 옮기기!
-
 
 :sparkles:
 파인더분들의 '나다운 일과 삶'을 응원합니다!!
@@ -1321,7 +1322,7 @@ class DiscordBot {
 
         } catch (error) {
             console.error('노션으로 내보내기 실패:', error);
-            message.reply('메시지를 노션으로 옮기는데 실패했습니다. 다시 시도해주세요.');
+            message.reply('메시지를 노션으로 옮기는데 실패했습니다. 은지캉님께 문의해주세요!');
         }
     }
 
@@ -1422,7 +1423,8 @@ class DiscordBot {
             const analysisPrompt = [
                 {
                     role: 'system',
-                    content: `     아래 제공된 사용자 활동 데이터, 댓글 내용, 자기소개글, 관심사 태그, 참여 기록, 목표 설정 정보 등을 바탕으로, 파인더스 클럽의 중요한 취지—즉, '나다운 일과 삶을 찾기', '서로의 경험과 관심사를 존중하며 함께 성장하기'—에 부합하는 따뜻하고 의미 있는 분석을 진행해 주세요.
+                    content: `아래 제공된 사용자 활동 데이터, 댓글 내용, 자기소개글, 관심사 태그, 참여 기록, 목표 설정 정보 등을 바탕으로, 
+                    파인더스 클럽의 중요한 취지—즉, '나다운 일과 삶을 찾기', '서로의 경험과 관심사를 존중하며 함께 성장하기'—에 부합하는 따뜻하고 의미 있는 분석을 진행해 주세요.
                     이 분석은 사용자 개개인이 자신의 이야기를 깊이 있게 돌아보고, 예상치 못한 가능성과 강점을 발견할 수 있도록 도움을 주는 것을 목표로 합니다.
                     
                     - 사용자가 처음 세운 목표 또는 탐구 주제에 대해 얼마나 성취했고, 어떤 방향으로 성장하고 있는지 따뜻하게 평가해 주세요.
@@ -1449,7 +1451,7 @@ class DiscordBot {
                     
                     주의 사항
                     - 이 분석은, 사용자 한 사람 한 사람의 내면과 잠재력을 존중하고, 따뜻한 마음으로 읽기 쉽고 격려하는 표현을 담아 작성해 주세요.
-                    - 언제나처럼, 솔직한 마음과 존중하는 태도를 잊지 말아 주세요.
+                    - 솔직한 마음과 존중하는 태도를 잊지 말아 주세요.
              
                     해당 내용을 바탕으로 요약을 해주시고, 포맷은 리포트 형식으로 해주세요.
                     마지막으로 따뜻한 응원의 메시지를 포함해주세요! 대답은 1900자 이하로 해주세요.`
