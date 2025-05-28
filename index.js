@@ -26,7 +26,7 @@ class OpenAIService {
 
     async getResponse(messages) {
         const response = await this.openai.chat.completions.create({
-            model: 'gpt-4-turbo',
+            model: 'gpt-4.1',
             messages: messages,
         });
         return response.choices[0].message.content;
@@ -1303,15 +1303,15 @@ class DiscordBot {
             }
 
             // 6. 결과 메시지에 DB 링크 포함
-            const resultMessage = `메시지가 성공적으로 노션으로 옮겨졌습니다! (새로운 메시지: ${newMessages.length}개) :heart:\n`;
-            const dbLinkMessage = `당신의 활동 기록을 확인하세요: ${userDbUrl}
+            const resultMessage = `메시지가 성공적으로 노션으로 옮겨졌습니다! (새로운 메시지: ${newMessages.length}개)\n`;
+            const dbLinkMessage = `:heart:당신의 활동 기록을 확인하세요 -> ${userDbUrl}:heart:
 
 [사용 방법]
 https://discord.com/channels/1133390614944301126/1346333747544588308/1368893906653020260
 
 1. 노션페이지 접근권한 신청! (제가 최대한 빨리 승인을 해보겠습니다:face_holding_back_tears:)
 2. 활동기록 DB 페이지 자체를 My workspace에 복제한다! (좌측 땡땡땡 버튼 -> Duplicate to -> My Workspace)
-3. 🍎다니님 템플릿을 자신의 Notion Space로 복제한다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
+3. 다니🍎님 템플릿을 자신의 Notion Space로 복제한다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
 4. 복제된 DB에서 move to 를 사용하여 다니님 템플릿으로 페이지 옮기기!
 
 :sparkles:
