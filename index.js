@@ -59,6 +59,8 @@ const GOODMORNING_CH_ID = '1346332674322731089';
 const SMALL_TRY_CH_ID = '1346333285814505502';
 const SMALL_TALK_CH_ID = '1346333747544588308';
 const AFTER_TALK_CH_ID = '1346333867002302596';
+const BEGIN_AGAIN_CH_ID = '1346333063118061661';
+
 
 const DEFAULT_CHANNEL_NAME = '사과';
 const DEFAULT_CHANNEL_EMOJI = '🍎';
@@ -176,6 +178,18 @@ class DiscordBot {
         } else if (message.content.startsWith('!chat')) {
             message.reply("오늘의 대화를 열심히 요약하고 있습니다! 잠시만 기다려주세요:heart: ");
             await this.handleSumMessage(message);
+        } else if (message.content.startsWith('!apple')) {
+            message.reply("채널 메시지를 JSON으로 내보내는 중입니다! 잠시만 기다려주세요:heart: ");
+            await this.exportChannelMessagesToJson();
+            message.reply("채널 메시지가 성공적으로 JSON 파일로 저장되었습니다! :sparkles:");
+        } else if (message.content.startsWith('!earth')) {
+            message.reply("지구님의 메시지를 Notion으로 옮기는 중입니다! 잠시만 기다려주세요:heart: ");
+            const result = await this.exportEarthMessagesToNotion();
+            message.reply(result);
+        } else if (message.content.startsWith('!song')) {
+            message.reply("지구님의 노래 관련 메시지를 Notion으로 옮기는 중입니다! 잠시만 기다려주세요:heart: ");
+            const result = await this.exportEarthSongMessagesToNotion();
+            message.reply(result);
         } else if (message.content.startsWith('<@1350718874672435270>')) {
             await this.handleAskMessage(message);
         } else if (message.mentions.repliedUser != null) {
@@ -731,808 +745,105 @@ class DiscordBot {
         return messages;
     }
 
-    async createUserDatabase(userName) {
-        try {
-            // 1. 기존 DB의 스키마 가져오기
-            const templateDb = await this.notion.databases.retrieve({
-                database_id: process.env.NOTION_DATABASE_ID,
-            });
+    async exportChannelMessagesToJson() {
+        const targetChannels = {
+            "1346335433591623824": "사과",
+            "1346332674322731089": "GOODMORNING",
+            "1346333285814505502": "SMALL_TRY",
+            "1346333747544588308": "SMALL_TALK",
+            "1346333867002302596": "AFTER_TALK"
+        };
 
-            // 템플릿 DB 속성 로깅
-            console.log('Template DB Properties:', JSON.stringify(templateDb.properties, null, 2));
+        const allChannelMessages = {};
 
-            // 2. 속성 복사
-            const properties = {};
-            for (const [key, value] of Object.entries(templateDb.properties)) {
-                // 각 속성 타입에 따른 처리
-                switch (value.type) {
-                    case 'title':
-                        properties[key] = { type: 'title', title: {} };
-                        break;
-                    case 'rich_text':
-                        properties[key] = { type: 'rich_text', rich_text: {} };
-                        break;
-                    case 'select':
-                        properties[key] = { 
-                            type: 'select', 
-                            select: { 
-                                options: value.select.options.map(option => ({
-                                    name: option.name,
-                                    color: option.color
-                                }))
-                            }
-                        };
-                        break;
-                    case 'status':
-                        // status 타입은 빈 객체로 설정
-                        properties[key] = { 
-                            type: 'status', 
-                            status: {} 
-                        };
-                        break;
-                    case 'date':
-                        properties[key] = { type: 'date', date: {} };
-                        break;
-                    case 'multi_select':
-                        properties[key] = { 
-                            type: 'multi_select', 
-                            multi_select: { 
-                                options: value.multi_select.options.map(option => ({
-                                    name: option.name,
-                                    color: option.color
-                                }))
-                            }
-                        };
-                        break;
-                    case 'number':
-                        properties[key] = { 
-                            type: 'number', 
-                            number: value.number 
-                        };
-                        break;
-                    case 'checkbox':
-                        properties[key] = { type: 'checkbox', checkbox: {} };
-                        break;
-                    case 'url':
-                        properties[key] = { type: 'url', url: {} };
-                        break;
-                    case 'email':
-                        properties[key] = { type: 'email', email: {} };
-                        break;
-                    case 'phone_number':
-                        properties[key] = { type: 'phone_number', phone_number: {} };
-                        break;
-                    case 'formula':
-                        properties[key] = { 
-                            type: 'formula', 
-                            formula: value.formula 
-                        };
-                        break;
-                    case 'relation':
-                        properties[key] = { 
-                            type: 'relation', 
-                            relation: value.relation 
-                        };
-                        break;
-                    case 'rollup':
-                        properties[key] = { 
-                            type: 'rollup', 
-                            rollup: value.rollup 
-                        };
-                        break;
-                    case 'created_time':
-                        properties[key] = { type: 'created_time', created_time: {} };
-                        break;
-                    case 'created_by':
-                        properties[key] = { type: 'created_by', created_by: {} };
-                        break;
-                    case 'last_edited_time':
-                        properties[key] = { type: 'last_edited_time', last_edited_time: {} };
-                        break;
-                    case 'last_edited_by':
-                        properties[key] = { type: 'last_edited_by', last_edited_by: {} };
-                        break;
-                    default:
-                        properties[key] = value;
-                }
+        for (const [channelId, channelName] of Object.entries(targetChannels)) {
+            try {
+                console.log(`Fetching messages from ${channelName} channel...`);
+                const messages = await this.fetchChannelMessages(channelId);
+                allChannelMessages[channelName] = {
+                    channelId: channelId,
+                    messageCount: messages.length,
+                    messages: messages
+                };
+                console.log(`Successfully fetched ${messages.length} messages from ${channelName}`);
+            } catch (error) {
+                console.error(`Error fetching messages from ${channelName}:`, error);
+                allChannelMessages[channelName] = {
+                    channelId: channelId,
+                    error: error.message
+                };
             }
-
-            // 3. 새로운 DB 생성
-            const newDb = await this.notion.databases.create({
-                parent: {
-                    type: "page_id",
-                    page_id: process.env.NOTION_WORKSPACE_PAGE_ID,
-                },
-                title: [
-                    {
-                        type: "text",
-                        text: {
-                            content: `${userName}님의 디스코드 활동 기록`,
-                        },
-                    },
-                ],
-                properties: properties,
-                is_inline: templateDb.is_inline,
-                description: templateDb.description,
-                icon: templateDb.icon,
-                cover: templateDb.cover,
-            });
-
-            return {
-                id: newDb.id,
-                url: newDb.url,
-            };
-        } catch (error) {
-            console.error('사용자 DB 생성 실패:', error);
-            throw error;
         }
+
+        // Save to JSON file
+        const filePath = path.join(__dirname, 'channel_messages.json');
+        fs.writeFileSync(filePath, JSON.stringify(allChannelMessages, null, 2), 'utf-8');
+        console.log(`Messages have been saved to ${filePath}`);
+
+        return allChannelMessages;
     }
 
-    async createNotionPageWithChunks(userDbId, pageProperties, children) {
-        const MAX_BLOCKS_PER_PAGE = 80;
-        const chunks = [];
-        
-        // 기본 페이지 속성과 함께 첫 번째 청크 생성
-        const firstChunk = children.slice(0, MAX_BLOCKS_PER_PAGE);
-        const firstPage = await this.notion.pages.create({
-            parent: {
-                database_id: userDbId,
-            },
-            properties: pageProperties,
-            children: firstChunk,
-            is_inline: true,
-            public_url: true
-        });
+    async exportEarthMessagesToNotion() {
+        try {
+            // 1. channel_messages.json 파일 읽기
+            const filePath = path.join(__dirname, 'channel_messages.json');
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            
+            // 2. 사과 채널에서 지구님의 메시지 필터링
+            const earthMessages = data['사과'].messages.filter(msg => msg.author === '지구');
+            
+            if (earthMessages.length === 0) {
+                return "지구님의 메시지를 찾을 수 없습니다.";
+            }
 
-        // 페이지 공유 설정 업데이트
-        await this.notion.pages.update({
-            page_id: firstPage.id,
-            properties: {},
-            public_url: true,
-            permissions: [
-                {
-                    type: 'public',
-                    access: 'full'
-                }
-            ]
-        });
+            // 3. 메시지를 90개씩 나누기 (Notion의 100개 제한을 고려)
+            const MAX_BLOCKS_PER_PAGE = 90;
+            const messageChunks = [];
+            for (let i = 0; i < earthMessages.length; i += MAX_BLOCKS_PER_PAGE) {
+                messageChunks.push(earthMessages.slice(i, i + MAX_BLOCKS_PER_PAGE));
+            }
 
-        chunks.push(firstPage);
-
-        // 나머지 메시지들을 새로운 페이지로 생성
-        for (let i = MAX_BLOCKS_PER_PAGE; i < children.length; i += MAX_BLOCKS_PER_PAGE) {
-            const chunk = children.slice(i, i + MAX_BLOCKS_PER_PAGE);
-            const nextPage = await this.notion.pages.create({
-                parent: {
-                    database_id: userDbId,
-                },
-                properties: {
+            // 4. 각 청크에 대해 Notion 페이지 생성
+            const pages = [];
+            for (let i = 0; i < messageChunks.length; i++) {
+                const chunk = messageChunks[i];
+                const pageProperties = {
                     '활동': {
                         title: [
                             {
                                 text: {
-                                    content: `${pageProperties['활동'].title[0].text.content} (계속)`,
+                                    content: `지구님의 사과방 메시지 모음 ${i + 1}/${messageChunks.length}`,
                                 },
                             },
                         ],
                     },
-                    '활동 구분': pageProperties['활동 구분'],
-                    '주최자': pageProperties['주최자'],
-                    '활동 날짜': pageProperties['활동 날짜'],
-                    '활동 상태': pageProperties['활동 상태'],
-                    '역할': pageProperties['역할']
-                },
-                children: chunk,
-                is_inline: true,
-                public_url: true
-            });
-
-            // 페이지 공유 설정 업데이트
-            await this.notion.pages.update({
-                page_id: nextPage.id,
-                properties: {},
-                public_url: true,
-                permissions: [
-                    {
-                        type: 'public',
-                        access: 'full'
-                    }
-                ]
-            });
-
-            chunks.push(nextPage);
-        }
-
-        return chunks;
-    }
-
-    async exportToNotion(message) {
-        try {
-            // 1. 저장된 Discord 데이터 로드
-            const cachePath = path.join(__dirname, 'discordData.json');
-            if (!fs.existsSync(cachePath)) {
-                message.reply('먼저 !update 명령어로 Discord 데이터를 업데이트해주세요.');
-                return;
-            }
-
-            const discordData = JSON.parse(await fs.promises.readFile(cachePath, 'utf8'));
-            const userName = message.author.globalName;
-
-            // 2. 사용자 DB 확인 및 생성
-            const newDb = await this.createUserDatabase(userName);
-            let userDbId = newDb.id;
-            let userDbUrl = newDb.url;
-            let userDb = await this.notion.databases.retrieve({
-                database_id: userDbId,
-            });
-
-            // 3. 데이터베이스 속성 가져오기
-            if (!userDb.properties['활동 구분']) {
-                console.log('활동 구분 속성이 없어 새로 생성합니다.');
-                await this.notion.databases.update({
-                    database_id: userDbId,
-                    properties: {
-                        '활동 구분': {
-                            select: {
-                                options: []
-                            }
-                        }
-                    }
-                });
-                // 업데이트된 DB 정보 다시 가져오기
-                userDb = await this.notion.databases.retrieve({
-                    database_id: userDbId,
-                });
-            }
-
-            // 활동 상태 속성이 없으면 생성
-            if (!userDb.properties['활동 상태']) {
-                console.log('활동 상태 속성이 없어 새로 생성합니다.');
-                await this.notion.databases.update({
-                    database_id: userDbId,
-                    properties: {
-                        '활동 상태': {
-                            type: 'status',
-                            status: {}
-                        }
-                    }
-                });
-                // 업데이트된 DB 정보 다시 가져오기
-                userDb = await this.notion.databases.retrieve({
-                    database_id: userDbId,
-                });
-            }
-
-            const activityTypeOptions = userDb.properties['활동 구분'].select.options;
-            console.log('활동 구분 옵션:', JSON.stringify(activityTypeOptions, null, 2));
-
-            const newMessages = [];
-
-            // 4. 사용자의 메시지만 필터링하여 Notion에 추가
-            for (const [channelId, channelData] of Object.entries(discordData)) {
-                try {
-                    console.log(`처리 중인 채널: ${channelData.name}`);
-                    // 활동 구분 옵션에서 일치하는 항목 찾기
-                    let matchingOption = activityTypeOptions.find(option => 
-                        option.name.toLowerCase() === channelData.name.toLowerCase()
-                    );
-
-                    console.log(`매칭된 옵션:`, matchingOption);
-
-                    // 옵션이 없으면 새로 추가
-                    if (!matchingOption) {
-                        console.log(`새로운 활동 구분 추가: ${channelData.name}`);
-                        const updatedDatabase = await this.notion.databases.update({
-                            database_id: userDbId,
-                            properties: {
-                                '활동 구분': {
-                                    select: {
-                                        options: [
-                                            ...activityTypeOptions,
-                                            {
-                                                name: channelData.name,
-                                                color: 'default'
-                                            }
-                                        ]
-                                    }
-                                }
-                            }
-                        });
-                        
-                        matchingOption = updatedDatabase.properties['활동 구분'].select.options.find(
-                            option => option.name.toLowerCase() === channelData.name.toLowerCase()
-                        );
-                        console.log(`추가된 후 매칭된 옵션:`, matchingOption);
-                    }
-
-                    if (!matchingOption) {
-                        console.error(`활동 구분 옵션을 찾을 수 없습니다: ${channelData.name}`);
-                        continue;
-                    }
-
-                    // 기존 메시지 ID 목록 가져오기
-                    const existingPages = await this.notion.databases.query({
-                        database_id: userDbId,
-                        filter: {
-                            property: '활동 구분',
-                            select: {
-                                equals: matchingOption.name
-                            }
-                        }
-                    });
-
-                    const existingMessageIds = new Set();
-                    for (const page of existingPages.results) {
-                        const blocks = await this.notion.blocks.children.list({
-                            block_id: page.id
-                        });
-                        for (const block of blocks.results) {
-                            if (block.type === 'callout' && block.callout.rich_text[0]?.text?.content) {
-                                const content = block.callout.rich_text[0].text.content;
-                                const match = content.match(/ID: (\d+)/);
-                                if (match) {
-                                    existingMessageIds.add(match[1]);
-                                }
-                            }
-                        }
-                    }
-
-                    // 사용자의 메시지만 필터링
-                    for (const thread of channelData.messages) {
-                        // 스레드의 시작 메시지가 사용자의 것인지 확인
-                        const isUserThread = thread.starterMessage && 
-                                           thread.starterMessage.author === message.author.globalName;
-
-                        // 사용자와 관련된 모든 댓글과 답글 찾기
-                        const relatedMessages = [];
-                        const processedMessageIds = new Set();
-
-                        for (const msg of thread.messages) {
-                            // 이미 존재하는 메시지는 건너뛰기
-                            if (existingMessageIds.has(msg.id)) {
-                                continue;
-                            }
-
-                            // 사용자가 작성한 메시지
-                            if (msg.author === message.author.globalName) {
-                                relatedMessages.push({
-                                    ...msg,
-                                    type: 'user_message'
-                                });
-                                processedMessageIds.add(msg.id);
-                                
-                                // 사용자의 메시지에 대한 답글
-                                if (msg.replies && msg.replies.length > 0) {
-                                    for (const reply of msg.replies) {
-                                        if (!processedMessageIds.has(reply.id) && !existingMessageIds.has(reply.id)) {
-                                            relatedMessages.push({
-                                                ...reply,
-                                                type: 'reply_to_user',
-                                                originalMessage: msg.content,
-                                                originalAuthor: msg.author
-                                            });
-                                            processedMessageIds.add(reply.id);
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // 사용자가 답글을 단 메시지
-                            if (msg.replies && msg.replies.length > 0) {
-                                for (const reply of msg.replies) {
-                                    if (reply.author === message.author.globalName && 
-                                        !processedMessageIds.has(reply.id) && 
-                                        !existingMessageIds.has(reply.id)) {
-                                        relatedMessages.push({
-                                            ...reply,
-                                            type: 'user_reply',
-                                            originalMessage: msg.content,
-                                            originalAuthor: msg.author
-                                        });
-                                        processedMessageIds.add(reply.id);
-                                    }
-                                }
-                            }
-                        }
-
-                        // 스레드가 사용자의 것이거나 관련 메시지가 있는 경우
-                        if (isUserThread || relatedMessages.length > 0) {
-                            // 메시지를 시간순으로 정렬
-                            const sortedMessages = [...relatedMessages].sort((a, b) => 
-                                a.timestamp - b.timestamp
-                            );
-
-                            // 스레드 작성자와 날짜 정보 가져오기
-                            const threadAuthor = thread.starterMessage ? 
-                                thread.starterMessage.author : 
-                                '알 수 없음';
-                            const threadDate = thread.starterMessage ? 
-                                new Date(thread.starterMessage.timestamp).toISOString() : 
-                                new Date().toISOString();
-
-                            // 페이지 속성 정의
-                            const pageProperties = {
-                                '활동': {
-                                    title: [
-                                        {
-                                            text: {
-                                                content: thread.name,
-                                            },
-                                        },
-                                    ],
-                                },
-                                '활동 구분': {
-                                    select: {
-                                        id: matchingOption.id,
-                                        name: matchingOption.name,
-                                    },
-                                },
-                                '주최자': {
-                                    rich_text: [
-                                        {
-                                            text: {
-                                                content: threadAuthor,
-                                            },
-                                        },
-                                    ],
-                                },
-                                '활동 날짜': {
-                                    date: {
-                                        start: threadDate,
-                                    },
-                                }
-                            };
-
-                            // '활동 상태' 속성이 존재하는 경우에만 추가
-                            if (userDb.properties['활동 상태']) {
-                                pageProperties['활동 상태'] = {
-                                    status: {
-                                        name: '완료'
-                                    }
-                                };
-                            }
-
-                            // '역할' 속성이 존재하는 경우에만 추가
-                            if (userDb.properties['역할']) {
-                                pageProperties['역할'] = {
-                                    select: {
-                                        name: isUserThread ? '주최' : '참여',
-                                    },
-                                };
-                            }
-
-                            const children = [
-                                {
-                                    object: 'block',
-                                    type: 'heading_1',
-                                    heading_1: {
-                                        rich_text: [
-                                            {
-                                                text: {
-                                                    content: thread.name,
-                                                },
-                                            },
-                                        ],
-                                    },
-                                },
-                                {
-                                    object: 'block',
-                                    type: 'paragraph',
-                                    paragraph: {
-                                        rich_text: [
-                                            {
-                                                text: {
-                                                    content: `작성자: ${threadAuthor}`,
-                                                },
-                                            },
-                                        ],
-                                    },
-                                },
-                                // 스레드 내용 추가
-                                {
-                                    object: 'block',
-                                    type: 'callout',
-                                    callout: {
-                                        rich_text: [
-                                            {
-                                                text: {
-                                                    content: thread.starterMessage ? 
-                                                        thread.starterMessage.content : 
-                                                        '스레드 내용이 없습니다.',
-                                                },
-                                            },
-                                        ],
-                                        icon: {
-                                            emoji: "📝"
-                                        },
-                                        color: "gray_background"
-                                    }
-                                },
-                                {
-                                    object: 'block',
-                                    type: 'heading_2',
-                                    heading_2: {
-                                        rich_text: [
-                                            {
-                                                text: {
-                                                    content: '대화 내용',
-                                                },
-                                            },
-                                        ],
-                                    },
-                                },
-                                // 모든 메시지와 답글 추가
-                                ...thread.messages.map(msg => {
-                                    // 메시지가 사용자의 것인지 확인
-                                    const isUserMessage = msg.author === message.author.globalName;
-                                    const isReplyToUser = msg.originalAuthor === message.author.globalName;
-                                    
-                                    return {
-                                        object: 'block',
-                                        type: 'callout',
-                                        callout: {
-                                            rich_text: [
-                                                {
-                                                    text: {
-                                                        content: `${msg.author}님의 메시지\n\n${msg.content}`,
-                                                    },
-                                                },
-                                            ],
-                                            icon: {
-                                                emoji: isUserMessage ? "💬" : (isReplyToUser ? "↩️" : "💭")
-                                            },
-                                            color: isUserMessage ? "green_background" : (isReplyToUser ? "yellow_background" : "gray_background")
-                                        }
-                                    };
-                                }),
-                            ];
-
-                            const pages = await this.createNotionPageWithChunks(userDbId, pageProperties, children);
-                            newMessages.push(thread.name);
-                            console.log(`${thread.name} 스레드가 노션에 추가되었습니다. (${pages.length} 페이지)`);
-                        }
-                    }
-                } catch (error) {
-                    console.error(`${channelData.name} 채널 처리 중 오류 발생:`, error);
-                }
-            }
-
-            // 7. 새로운 메시지가 있으면 분석 실행
-            if (newMessages.length > 0) {
-                await this.analyzeNotionActivities(message);
-            }
-
-            // 6. 결과 메시지에 DB 링크 포함
-            const resultMessage = `메시지가 성공적으로 노션으로 옮겨졌습니다! (새로운 메시지: ${newMessages.length}개)\n`;
-            const dbLinkMessage = `:heart:당신의 활동 기록을 확인하세요 -> ${userDbUrl}:heart:
-
-[사용 방법]
-https://discord.com/channels/1133390614944301126/1346333747544588308/1368893906653020260
-
-1. 노션페이지 접근권한 신청! (제가 최대한 빨리 승인을 해보겠습니다:face_holding_back_tears:)
-2. 활동기록 DB 페이지 자체를 My workspace에 복제한다! (좌측 땡땡땡 버튼 -> Duplicate to -> My Workspace)
-3. 다니🍎님 템플릿을 자신의 Notion Space로 복제한다! (https://puzzled-mahogany-c80.notion.site/_-1cd687e8fae38033b520cc88dccdf70e?pvs=4)
-4. 복제된 DB에서 move to 를 사용하여 다니님 템플릿으로 페이지 옮기기!
-
-:sparkles:
-파인더분들의 '나다운 일과 삶'을 응원합니다!!
-조용하고 소소하게 일상 속 작은 도움을 주는 구두주걱 같은 삶을 꿈꾸는 은지캉 드림:gift_heart:`;
-            
-            message.reply(resultMessage + dbLinkMessage);
-
-        } catch (error) {
-            console.error('노션으로 내보내기 실패:', error);
-            message.reply('메시지를 노션으로 옮기는데 실패했습니다. 은지캉님께 문의해주세요!');
-        }
-    }
-
-    async analyzeNotionActivities(message) {
-        try {
-            // 1. IAM_FINDER_CH_ID에서 사용자의 자기소개 가져오기
-            const iamFinderChannel = await this.client.channels.fetch(IAM_FINDER_CH_ID);
-            const activeThreads = await iamFinderChannel.threads.fetchActive();
-            const archivedThreads = await iamFinderChannel.threads.fetchArchived();
-
-            let selfIntroduction = null;
-            for (const thread of [...activeThreads.threads.values(), ...archivedThreads.threads.values()]) {
-                try {
-                    const starterMessage = await thread.fetchStarterMessage();
-                    if (starterMessage.author.globalName === message.author.globalName) {
-                        selfIntroduction = {
-                            title: thread.name,
-                            content: starterMessage.content,
-                            date: thread.createdAt
-                        };
-                        break;
-                    }
-                } catch (error) {
-                    console.error('스레드 메시지 가져오기 실패:', error);
-                }
-            }
-
-            // 2. 사용자 DB에서 활동 가져오기
-            const userName = message.author.globalName;
-            const userDb = await this.getUserDatabase(userName);
-
-            if (!userDb) {
-                message.reply("먼저 !ex 명령어로 활동을 저장해주세요:heart:");
-                return;
-            }
-
-            const userDbId = userDb.id;
-
-            // 사용자 DB의 속성 구조 확인
-            const notionPages = await this.notion.databases.query({
-                database_id: userDbId,
-                filter: {
-                    property: '활동 구분',
-                    select: {
-                        is_not_empty: true
-                    }
-                }
-            });
-
-            if (notionPages.results.length === 0) {
-                message.reply("아직 노션에 저장된 활동이 없어요!");
-                return;
-            }
-
-            // 3. 활동 데이터 수집
-            const activities = [];
-            for (const page of notionPages.results) {
-                const pageContent = await this.notion.pages.retrieve({
-                    page_id: page.id
-                });
-
-                const activityType = page.properties['활동 구분'].select?.name || '기타';
-                const activityDate = page.properties['활동 날짜'].date?.start || new Date().toISOString();
-                const isHost = page.properties['주최자'].rich_text[0]?.text?.content === userName;
-                
-                // 페이지 내용 가져오기
-                const blocks = await this.notion.blocks.children.list({
-                    block_id: page.id
-                });
-
-                let userMessages = [];
-                
-                for (const block of blocks.results) {
-                    if (block.type === 'callout') {
-                        const messageContent = block.callout.rich_text[0]?.text?.content || '';
-                        if (messageContent.includes(userName)) {
-                            userMessages.push({
-                                content: messageContent,
-                                timestamp: block.created_time
-                            });
-                        }
-                    }
-                }
-
-                // 메시지를 시간순으로 정렬
-                userMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-                activities.push({
-                    title: page.properties['활동'].title[0]?.text?.content || '제목 없음',
-                    type: activityType,
-                    date: activityDate,
-                    isHost: isHost,
-                    userMessages: userMessages.map(msg => msg.content)
-                });
-            }
-
-            // 4. OpenAI를 사용하여 활동 분석
-            const analysisPrompt = [
-                {
-                    role: 'system',
-                    content: `아래 제공된 사용자 활동 데이터, 댓글 내용, 자기소개글, 관심사 태그, 참여 기록, 목표 설정 정보 등을 바탕으로, 
-                    파인더스 클럽의 중요한 취지—즉, '나다운 일과 삶을 찾기', '서로의 경험과 관심사를 존중하며 함께 성장하기'—에 부합하는 따뜻하고 의미 있는 분석을 진행해 주세요.
-                    이 분석은 사용자 개개인이 자신의 이야기를 깊이 있게 돌아보고, 예상치 못한 가능성과 강점을 발견할 수 있도록 도움을 주는 것을 목표로 합니다.
-                    
-                    - 사용자가 처음 세운 목표 또는 탐구 주제에 대해 얼마나 성취했고, 어떤 방향으로 성장하고 있는지 따뜻하게 평가해 주세요.
-                    - 성과와 동시에 부족한 부분이나 더 도전해보고 싶은 점도 자연스럽게 피드백해 주세요.
-                    
-  
-                    - 활동 기록, 자기소개, 태그 및 참여 내용 등을 분석하여, 사용자 자신이 자연스럽게 끌리는 관심사와 강점을 도출해 주세요.
-                    - 이 과정에서 배려심, 자기주도성, 창의성, 공감력 등 사용자의 고유한 성격과 특성도 함께 살펴봐 주세요.
-                    
-            
-                    - 활동하며 느꼈던 감정 또는 의미 부여했던 순간, 그리고 감동 혹은 자랑스러웠던 경험을 부드럽고 따뜻한 어조로 정리해 주세요.
-                    - 이 과정이 '나다운 나'를 더 잘 이해하고, 서로를 존중하는 클럽의 정신과 어떻게 어우러지는지도 함께 표현해 주세요.
-                    
- 
-                    - 활동 빈도, 참여한 채널이나 경험들이 어떤 방향성을 보여주는지 평가해 주세요.
-                    - 지금까지의 활동이 사용자에게 어떤 성취감 또는 성장의 징후를 보여주는지 함께 설명해 주세요.
-                    
-  
-                    - 사용자님이 관심 갖고 있는 주제 또는 강점을 더 깊게 탐구하거나, 새로운 경험으로 확장할 수 있는 따뜻한 추천을 해 주세요.
-                    - '나다운 일과 삶을 만들어 가는' 길에 도움이 될 만한 제언도 포함해 주세요.
- 
- 
-                    - 지금까지의 활동과 분석 내용을 간단히 정리하며, 사용자가 자신의 이야기를 통해 앞으로 어떻게 성장할 수 있을지에 대한 작은 응원과 조언을 적어 주세요.
-                    
-                    주의 사항
-                    - 이 분석은, 사용자 한 사람 한 사람의 내면과 잠재력을 존중하고, 따뜻한 마음으로 읽기 쉽고 격려하는 표현을 담아 작성해 주세요.
-                    - 솔직한 마음과 존중하는 태도를 잊지 말아 주세요.
-             
-                    해당 내용을 바탕으로 요약을 해주시고, 포맷은 리포트 형식으로 해주세요.
-                    마지막으로 따뜻한 응원의 메시지를 포함해주세요! 대답은 1900자 이하로 해주세요.`
-                },
-                {
-                    role: 'user',
-                    content: `다음은 사용자의 활동 데이터입니다. 이를 분석하여 응원해주세요:
-
-                    [자기소개]
-                    ${selfIntroduction ? JSON.stringify({
-                        title: selfIntroduction.title,
-                        content: selfIntroduction.content,
-                        date: selfIntroduction.date
-                    }, null, 2) : '자기소개를 찾을 수 없습니다.'}
-
-                    [활동 데이터]
-                    ${JSON.stringify(activities, null, 2)}`
-                }
-            ];
-
-            const analysis = await this.openAIService.getResponse(analysisPrompt);
-
-            // 5. 분석 결과를 사용자 DB에 저장
-            const pageProperties = {
-                '활동': {
-                    title: [
-                        {
-                            text: {
-                                content: `${userName}님의 활동 분석 리포트`,
-                            },
+                    '활동 구분': {
+                        select: {
+                            name: '사과',
                         },
-                    ],
-                },
-                '활동 구분': {
-                    select: {
-                        name: '활동 리포트',
                     },
-                },
-                '주최자': {
-                    rich_text: [
-                        {
-                            text: {
-                                content: 'AI 분석',
+                    '주최자': {
+                        rich_text: [
+                            {
+                                text: {
+                                    content: '지구',
+                                },
                             },
-                        },
-                    ],
-                },
-                '활동 날짜': {
-                    date: {
-                        start: new Date().toISOString(),
+                        ],
                     },
-                },
-            };
-
-            // DB에 존재하는 속성만 추가
-            if (userDb.properties['활동 장소']) {
-                pageProperties['활동 장소'] = {
-                    rich_text: [
-                        {
-                            text: {
-                                content: '디스코드',
-                            },
+                    '활동 날짜': {
+                        date: {
+                            start: new Date().toISOString(),
                         },
-                    ],
-                };
-            }
-
-            if (userDb.properties['활동 상태']) {
-                pageProperties['활동 상태'] = {
-                    status: {
-                        name: '완료'
+                    },
+                    '활동 상태': {
+                        status: {
+                            name: '완료'
+                        }
                     }
                 };
-            }
 
-            const analysisPage = await this.notion.pages.create({
-                parent: {
-                    database_id: userDbId,
-                },
-                properties: pageProperties,
-                children: [
+                const children = [
                     {
                         object: 'block',
                         type: 'heading_1',
@@ -1540,7 +851,7 @@ https://discord.com/channels/1133390614944301126/1346333747544588308/13688939066
                             rich_text: [
                                 {
                                     text: {
-                                        content: `${userName}님의 활동 분석 리포트`,
+                                        content: `지구님의 사과방 메시지 모음 (${i + 1}/${messageChunks.length})`,
                                     },
                                 },
                             ],
@@ -1553,57 +864,190 @@ https://discord.com/channels/1133390614944301126/1346333747544588308/13688939066
                             rich_text: [
                                 {
                                     text: {
-                                        content: `작성일: ${new Date().toLocaleDateString()}`,
+                                        content: `이 페이지에는 총 ${chunk.length}개의 메시지가 있습니다.`,
                                     },
                                 },
                             ],
                         },
                     },
-                    // 분석 결과를 2000자씩 나누어 저장
-                    ...analysis.match(/.{1,2000}/g).map(chunk => ({
-                        object: 'block',
-                        type: 'paragraph',
-                        paragraph: {
-                            rich_text: [
-                                {
-                                    text: {
-                                        content: chunk,
+                    // 메시지들을 시간순으로 정렬
+                    ...chunk
+                        .sort((a, b) => a.timestamp - b.timestamp)
+                        .map(msg => ({
+                            object: 'block',
+                            type: 'callout',
+                            callout: {
+                                rich_text: [
+                                    {
+                                        text: {
+                                            content: `${new Date(msg.timestamp).toLocaleString()}\n\n${msg.content}`,
+                                        },
                                     },
+                                ],
+                                icon: {
+                                    emoji: "💬"
                                 },
-                            ],
-                        },
-                    })),
-                ],
-            });
+                                color: "green_background"
+                            }
+                        }))
+                ];
 
-            // 데이터베이스 공유 설정 업데이트
-            const updatedDb = await this.notion.databases.update({
-                database_id: userDbId,
-                is_inline: false
-            });
+                // 5. Notion 페이지 생성
+                const page = await this.notion.pages.create({
+                    parent: {
+                        database_id: process.env.NOTION_DATABASE_ID,
+                    },
+                    properties: pageProperties,
+                    children: children,
+                });
 
-            // 데이터베이스의 부모 페이지 공유 설정 업데이트
-            const parentPage = await this.notion.pages.retrieve({
-                page_id: userDb.parent.page_id
-            });
+                pages.push(page);
+            }
 
-            await this.notion.pages.update({
-                page_id: parentPage.id,
-                public_url: true,
-                permissions: [
-                    {
-                        type: 'public',
-                        access: 'full'
-                    }
-                ]
-            });
+            // 6. 결과 메시지 생성
+            const pageLinks = pages.map((page, index) => 
+                `페이지 ${index + 1}: ${page.url}`
+            ).join('\n');
 
-            // 첫 번째 메시지 (노션 링크 포함) 전송
-            await message.reply(analysis);
-            
+            return `지구님의 메시지 ${earthMessages.length}개가 Notion에 저장되었습니다!\n\n${pageLinks}`;
         } catch (error) {
-            console.error('활동 분석 중 오류 발생:', error);
-            message.reply('활동 분석에 실패했어요. 다시 시도해주세요:heart:');
+            console.error('Notion으로 내보내기 실패:', error);
+            return '메시지를 Notion으로 옮기는데 실패했습니다.';
+        }
+    }
+
+    async exportEarthSongMessagesToNotion() {
+        try {
+            // 1. channel_messages.json 파일 읽기
+            const filePath = path.join(__dirname, 'channel_messages.json');
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            
+            // 2. 사과 채널에서 지구님의 메시지 중 '노래'가 포함된 메시지만 필터링
+            const earthMessages = data['사과'].messages.filter(msg => 
+                msg.author === '지구' && msg.content.includes('노래')
+            );
+            
+            if (earthMessages.length === 0) {
+                return "지구님의 노래 관련 메시지를 찾을 수 없습니다.";
+            }
+
+            // 3. 메시지를 90개씩 나누기 (Notion의 100개 제한을 고려)
+            const MAX_BLOCKS_PER_PAGE = 90;
+            const messageChunks = [];
+            for (let i = 0; i < earthMessages.length; i += MAX_BLOCKS_PER_PAGE) {
+                messageChunks.push(earthMessages.slice(i, i + MAX_BLOCKS_PER_PAGE));
+            }
+
+            // 4. 각 청크에 대해 Notion 페이지 생성
+            const pages = [];
+            for (let i = 0; i < messageChunks.length; i++) {
+                const chunk = messageChunks[i];
+                const pageProperties = {
+                    '활동': {
+                        title: [
+                            {
+                                text: {
+                                    content: `지구님의 노래 관련 메시지 모음 ${i + 1}/${messageChunks.length}`,
+                                },
+                            },
+                        ],
+                    },
+                    '활동 구분': {
+                        select: {
+                            name: '사과',
+                        },
+                    },
+                    '주최자': {
+                        rich_text: [
+                            {
+                                text: {
+                                    content: '지구',
+                                },
+                            },
+                        ],
+                    },
+                    '활동 날짜': {
+                        date: {
+                            start: new Date().toISOString(),
+                        },
+                    },
+                    '활동 상태': {
+                        status: {
+                            name: '완료'
+                        }
+                    }
+                };
+
+                const children = [
+                    {
+                        object: 'block',
+                        type: 'heading_1',
+                        heading_1: {
+                            rich_text: [
+                                {
+                                    text: {
+                                        content: `지구님의 노래 관련 메시지 모음 (${i + 1}/${messageChunks.length})`,
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                    {
+                        object: 'block',
+                        type: 'paragraph',
+                        paragraph: {
+                            rich_text: [
+                                {
+                                    text: {
+                                        content: `이 페이지에는 총 ${chunk.length}개의 노래 관련 메시지가 있습니다.`,
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                    // 메시지들을 시간순으로 정렬
+                    ...chunk
+                        .sort((a, b) => a.timestamp - b.timestamp)
+                        .map(msg => ({
+                            object: 'block',
+                            type: 'callout',
+                            callout: {
+                                rich_text: [
+                                    {
+                                        text: {
+                                            content: `${new Date(msg.timestamp).toLocaleString()}\n\n${msg.content}`,
+                                        },
+                                    },
+                                ],
+                                icon: {
+                                    emoji: "🎵"
+                                },
+                                color: "blue_background"
+                            }
+                        }))
+                ];
+
+                // 5. Notion 페이지 생성
+                const page = await this.notion.pages.create({
+                    parent: {
+                        database_id: process.env.NOTION_DATABASE_ID,
+                    },
+                    properties: pageProperties,
+                    children: children,
+                });
+
+                pages.push(page);
+            }
+
+            // 6. 결과 메시지 생성
+            const pageLinks = pages.map((page, index) => 
+                `페이지 ${index + 1}: ${page.url}`
+            ).join('\n');
+
+            return `지구님의 노래 관련 메시지 ${earthMessages.length}개가 Notion에 저장되었습니다!\n\n${pageLinks}`;
+        } catch (error) {
+            console.error('Notion으로 내보내기 실패:', error);
+            return '메시지를 Notion으로 옮기는데 실패했습니다.';
         }
     }
 }
